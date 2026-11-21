@@ -1,0 +1,13 @@
+{
+  "home": { "lat": 43.1204, "lon": 6.1286, "label": "Hyères" },
+  "radius_km": 400,
+  "default_threshold_cm": 20,
+  "alert_all_in_radius": false,
+  "spots": {
+    "lautaret": 15,
+    "vars-col": 15,
+    "montcenis": 15,
+    "isola": 20,
+    "praloup": 20
+  }
+}

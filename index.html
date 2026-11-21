@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chute de Neige</title>
+  <meta name="description" content="Spots de snowkite et stations de ski en France : météo, neige, vent, webcams et alertes chute de neige.">
+  <meta name="theme-color" content="#0f4c81">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>❄️ Chute de Neige</h1>
+    <button id="btnRefresh" class="icon-btn" title="Actualiser">⟳</button>
+  </header>
+
+  <section class="panel" id="settings">
+    <div class="row">
+      <label class="grow">📍 Position
+        <div class="loc">
+          <input id="locInput" type="text" placeholder="Ville (ex : Hyères)" autocomplete="off">
+          <button id="btnGeo" title="Me localiser">🎯</button>
+        </div>
+        <ul id="locResults" class="results" hidden></ul>
+        <small id="locLabel" class="muted"></small>
+      </label>
+    </div>
+    <div class="row">
+      <label class="grow">Rayon : <b id="radiusVal"></b> km
+        <input id="radius" type="range" min="50" max="1200" step="25">
+      </label>
+    </div>
+    <div class="row chips" id="typeFilter">
+      <button data-type="all">Tout</button>
+      <button data-type="kite">🪁 Snowkite</button>
+      <button data-type="ski">⛷️ Ski</button>
+      <button data-type="fav">⭐ Favoris</button>
+    </div>
+    <div class="row">
+      <label>Trier par
+        <select id="sort">
+          <option value="dist">Distance</option>
+          <option value="snow">Neige à venir</option>
+          <option value="wind">Vent (kite)</option>
+        </select>
+      </label>
+      <button id="btnAlerts" class="secondary">🔔 Alertes</button>
+    </div>
+  </section>
+
+  <section class="panel" id="alertPanel" hidden>
+    <h2>🔔 Alertes chute de neige</h2>
+    <p class="muted">Une alerte se déclenche quand la neige prévue sur 3 jours dépasse le seuil. Chaque station peut avoir son propre seuil (bouton 🔔 sur la fiche).</p>
+    <label>Seuil par défaut : <b id="thrVal"></b> cm / 72 h
+      <input id="threshold" type="range" min="5" max="80" step="5">
+    </label>
+    <label class="check"><input type="checkbox" id="alertAll"> Alerter pour <b>tous</b> les spots dans mon rayon (sinon seulement ceux avec 🔔)</label>
+    <div class="row">
+      <button id="btnNotif">Activer les notifications</button>
+      <span id="notifState" class="muted"></span>
+    </div>
+    <details>
+      <summary>Recevoir les alertes même appli fermée (ntfy)</summary>
+      <p class="muted">Installe l'appli gratuite <b>ntfy</b> sur ton téléphone et abonne-toi à un sujet secret (ex : <code>neige-hyeres-8f3k</code>). Copie ta config ci-dessous dans le fichier <code>alerts-config.json</code> du dépôt : une tâche GitHub vérifie la météo toutes les 3 h et t'envoie une notification (voir README).</p>
+      <button id="btnExport" class="secondary">Copier ma config d'alertes</button>
+      <small id="exportMsg" class="muted"></small>
+    </details>
+  </section>
+
+  <section id="alertsBanner" hidden></section>
+
+  <nav class="tabs">
+    <button data-view="list" class="active">Liste</button>
+    <button data-view="map">Carte</button>
+  </nav>
+
+  <main>
+    <p id="status" class="muted"></p>
+    <div id="list"></div>
+    <div id="map" hidden></div>
+  </main>
+
+  <footer class="muted">
+    Météo : <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (modèles Météo-France AROME/ARPEGE, ECMWF…).
+    Distances à vol d'oiseau. Vérifie toujours le BRA et l'ouverture des routes avant de partir.
+  </footer>
+
+  <template id="cardTpl">
+    <article class="card">
+      <div class="card-head">
+        <div>
+          <h3 class="name"></h3>
+          <div class="meta muted"></div>
+        </div>
+        <div class="actions">
+          <button class="fav icon-btn" title="Favori">☆</button>
+          <button class="bell icon-btn" title="Alerte neige">🔕</button>
+        </div>
+      </div>
+      <div class="now"></div>
+      <div class="days"></div>
+      <p class="info muted"></p>
+      <div class="links"></div>
+    </article>
+  </template>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
