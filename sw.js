@@ -1,10 +1,10 @@
 // Service worker : appli utilisable hors ligne (dernières données en cache)
-const CACHE = 'chute-de-neige-v6';
+const CACHE = 'chute-de-neige-v7';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'spots.json', 'spots-osm.json', 'manifest.webmanifest', 'icons/icon-192.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
@@ -15,7 +15,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // API météo : réseau direct
   e.respondWith(
-    fetch(e.request)
+    // no-cache : on revalide toujours auprès du serveur pour avoir la dernière version
+    fetch(e.request, { cache: 'no-cache' })
       .then((r) => { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request))
   );

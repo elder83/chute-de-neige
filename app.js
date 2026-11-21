@@ -582,6 +582,15 @@ async function init() {
   state.spots = [...cur, ...osm];
   await refresh();
   setInterval(() => refresh(), CHECK_EVERY_MIN * 60000);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update()).catch(() => {});
+    // quand une nouvelle version prend la main, on recharge une fois
+    const hadController = !!navigator.serviceWorker.controller; // pas de rechargement à la 1re visite
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    });
+  }
 }
 init();
