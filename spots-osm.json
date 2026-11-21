@@ -70,6 +70,7 @@
 {"id": "osm-laye", "name": "Laye", "type": "ski", "massif": "Champsaur", "lat": 44.6363, "lon": 6.0615, "alt": 1570, "web": "https://www.champsaur-valgaudemar.com/hiver/ski-et-neige/les-stations/laye/"},
 {"id": "osm-le-collet-d-allevard", "name": "Le Collet d'Allevard", "type": "ski", "massif": "Alpes", "lat": 45.3957, "lon": 6.1285, "alt": 1670, "web": "https://www.lecollet.com"},
 {"id": "osm-le-grand-domaine", "name": "Le Grand Domaine", "type": "ski", "massif": "Tarentaise", "lat": 45.4512, "lon": 6.4021, "alt": 1610, "web": "https://www.legranddomaine.fr/"},
+{"id": "osm-le-grand-puy", "name": "Le Grand Puy", "type": "ski", "massif": "Alpes-de-Haute-Provence", "lat": 44.3193, "lon": 6.386, "alt": 1514, "web": "https://www.seynelesalpes-tourisme.com/ski-neige/ski-alpin"},
 {"id": "osm-le-granier", "name": "Le Granier", "type": "ski", "massif": "Alpes", "lat": 45.4609, "lon": 5.9072, "alt": 1169, "web": "https://www.stationdugranier.com/"},
 {"id": "osm-le-mourtis", "name": "Le Mourtis", "type": "ski", "massif": "Pyrénées (Hautes-Pyrénées)", "lat": 42.9052, "lon": 0.7717, "alt": 1617, "web": "https://www.haute-garonne-montagne.com/stations/le-mourtis-hiver/"},
 {"id": "osm-le-reposoir-chalet-neuf", "name": "Le Reposoir Chalet Neuf", "type": "ski", "massif": "Aravis", "lat": 46.0064, "lon": 6.5039, "alt": 1470},
