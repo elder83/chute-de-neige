@@ -22,6 +22,9 @@ def haversine(a, b):
 def main():
     cfg = json.loads((ROOT / "alerts-config.json").read_text())
     spots = json.loads((ROOT / "spots.json").read_text())
+    osm = ROOT / "spots-osm.json"
+    if osm.exists():
+        spots += json.loads(osm.read_text())
     home, radius = cfg["home"], cfg.get("radius_km", 400)
     targets = []
     for s in spots:

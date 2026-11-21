@@ -24,7 +24,7 @@
   {"id":"praloup","name":"Pra-Loup","type":"ski","massif":"Ubaye","lat":44.3660,"lon":6.6000,"alt":1630,"web":"https://www.praloup.com"},
   {"id":"sauze","name":"Le Sauze – Super Sauze","type":"ski","massif":"Ubaye","lat":44.3530,"lon":6.6900,"alt":1700},
   {"id":"stanne","name":"Sainte-Anne-la-Condamine","type":"ski","massif":"Ubaye","lat":44.4250,"lon":6.7000,"alt":1800},
-  {"id":"chabanon","name":"Chabanon","type":"ski","massif":"Alpes-de-Haute-Provence","lat":44.3380,"lon":6.3500,"alt":1680},
+  {"id":"chabanon","name":"Chabanon","type":"ski","massif":"Alpes-de-Haute-Provence","lat":44.3413,"lon":6.2918,"alt":1700},
   {"id":"vars","name":"Vars","type":"both","massif":"Hautes-Alpes","lat":44.5720,"lon":6.6830,"alt":1850,"web":"https://www.vars.com","info":"Domaine de la Forêt Blanche + col de Vars pour le kite"},
   {"id":"risoul","name":"Risoul","type":"ski","massif":"Hautes-Alpes","lat":44.6200,"lon":6.6400,"alt":1850,"web":"https://www.risoul.com"},
   {"id":"orres","name":"Les Orres","type":"ski","massif":"Hautes-Alpes","lat":44.4930,"lon":6.5550,"alt":1650,"web":"https://www.lesorres.com"},

@@ -15,6 +15,33 @@ out tags bb;
 """
 
 
+# Stations frontalières hors de France et grands domaines déjà couverts
+EXCLUDE = {"Courmayeur", "La Thuile", "Riserva Bianca – Limone Piemonte", "Estación de esquí de Candanchú",
+           "Grandvalira", "Champéry – Les Crosets – Champoussin – Morgins", "Paradiski", "Les Portes du Soleil"}
+# Sites aussi connus pour le snowkite
+KITE = {"Snowkite Markstein": ("kite", "Site de snowkite du Markstein, crêtes vosgiennes"),
+        "Plans d'Hotonnes - Plateau de Retord": ("both", "Plateau de Retord, grands espaces ouverts pour le snowkite"),
+        "Les Estables": ("both", "Massif du Mézenc, spot de snowkite réputé")}
+
+
+def norm(s):
+    return re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower())
+
+
+def clean(spots, curated):
+    """Retire stations étrangères et doublons de la liste manuelle, ajoute les types kite."""
+    names = [norm(t["name"].split(" – ")[0]) for t in curated]
+    out = []
+    for s in spots:
+        if s["name"] in EXCLUDE: continue
+        n = norm(s["name"])
+        if any(len(b) > 4 and (b in n or n in b) for b in names): continue
+        if s["name"] in KITE:
+            s["type"], s["info"] = KITE[s["name"]]
+        out.append(s)
+    return out
+
+
 def km(a, b):
     r = math.pi / 180
     x = math.sin((b[0] - a[0]) * r / 2) ** 2 + math.cos(a[0] * r) * math.cos(b[0] * r) * math.sin((b[1] - a[1]) * r / 2) ** 2
@@ -81,9 +108,17 @@ def main():
         s = {"id": sid, "name": c["name"], "type": "ski", "massif": massif, "lat": c["lat"], "lon": c["lon"], "alt": c["alt"]}
         if c["web"] and c["web"].startswith("http"): s["web"] = c["web"]
         out.append(s)
+    out = clean(out, curated)
     (ROOT / "spots-osm.json").write_text("[\n" + ",\n".join(json.dumps(s, ensure_ascii=False) for s in out) + "\n]\n")
     print("écrit :", len(out))
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--clean-only" in sys.argv:  # nettoyage du fichier existant sans interroger OSM
+        f = ROOT / "spots-osm.json"
+        out = clean(json.loads(f.read_text()), json.loads((ROOT / "spots.json").read_text()))
+        f.write_text("[\n" + ",\n".join(json.dumps(s, ensure_ascii=False) for s in out) + "\n]\n")
+        print("écrit :", len(out))
+    else:
+        main()

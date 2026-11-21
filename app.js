@@ -7,11 +7,8 @@ const CHECK_EVERY_MIN = 30;     // vérification des alertes appli ouverte
 const DAYS = 14;                // jours de prévision
 const PAST = 2;                 // jours passés (neige tombée)
 const T0 = PAST;                // index d'aujourd'hui dans les tableaux "daily"
-const KITE_MIN = 12, KITE_MAX = 40, KITE_GUST_MAX = 55;          // badge vent actuel (km/h)
-const SESSION = {
-  kite: { windMin: 15, windMax: 40, gustMax: 55, maxSnowfall: 3, minBase: 15 },
-  ski: { freshMin: 10, maxSnowfall: 3, windMax: 45 },
-};
+const KITE_DEFAULT = { windMin: 15, windMax: 40, gustMax: 55, minSnow: 10 }; // km/h, cm
+const SKI = { freshMin: 10, maxSnowfall: 3, windMax: 45 };
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -31,6 +28,9 @@ const state = {
   bells: store.get('bells', {}),
   threshold: store.get('threshold', 20),
   alertAll: store.get('alertAll', false),
+  kite: { ...KITE_DEFAULT, ...store.get('kite', {}) },
+  mapKite: store.get('mapKite', true),
+  mapSki: store.get('mapSki', true),
   view: 'list',
   map: null, markers: null,
 };
@@ -71,8 +71,9 @@ const dayLong = (w, i) => i === T0 ? "aujourd'hui" : i === T0 + 1 ? 'demain'
 
 function kiteRating(wind, gust) {
   if (wind == null) return null;
-  if (wind < KITE_MIN) return { cls: 'warn', txt: 'Pas assez de vent' };
-  if (wind > KITE_MAX || (gust != null && gust > KITE_GUST_MAX)) return { cls: 'bad', txt: 'Trop fort' };
+  const k = state.kite;
+  if (wind < k.windMin) return { cls: 'warn', txt: 'Pas assez de vent' };
+  if (wind > k.windMax || (gust != null && gust > k.gustMax)) return { cls: 'bad', txt: 'Trop fort / rafales' };
   return { cls: 'good', txt: 'Bon pour le kite' };
 }
 const isKite = (s) => s.type === 'kite' || s.type === 'both';
@@ -84,29 +85,37 @@ function summarize(w) {
   return { past48: sum(sf.slice(0, T0)), next72: sum(sf.slice(T0, T0 + 3)) };
 }
 
+/* Neige au sol (cm) le jour i : prévision du modèle à midi, sinon estimation
+   à partir de la hauteur actuelle + chutes prévues (sans fonte). */
+function snowDepth(w, i) {
+  const v = w.depth?.[i];
+  if (v != null) return v * 100;
+  let base = (w.current.snow_depth || 0) * 100;
+  for (let j = T0; j < i; j++) base += w.daily.snowfall_sum[j] || 0;
+  return base;
+}
+
 /* Détection des sessions sur 14 jours */
 function sessionsFor(s, w) {
   if (!w) return [];
   const d = w.daily, out = [];
   const sf = (i) => d.snowfall_sum[i] || 0;
-  let base = (w.current.snow_depth || 0) * 100; // cm au sol aujourd'hui (estimé)
   for (let i = T0; i < d.time.length; i++) {
     const code = d.weather_code[i], wind = d.wind_speed_10m_max[i], gust = d.wind_gusts_10m_max[i];
     const far = i - T0 >= 7;
     if (isKite(s)) {
-      const k = SESSION.kite;
-      if (wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax && sf(i) < k.maxSnowfall
-          && base >= k.minBase && code < 95 && !isRain(code)) {
-        out.push({ i, kind: 'kite', far, txt: `${round(wind)} km/h ${dirName(d.wind_direction_10m_dominant[i])}` });
+      // Kite : il faut de la neige au sol (fraîche ou non) et du vent dans la bonne plage
+      const k = state.kite, snow = snowDepth(w, i);
+      if (snow >= k.minSnow && wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax) {
+        out.push({ i, kind: 'kite', far, txt: `${round(wind)} km/h ${dirName(d.wind_direction_10m_dominant[i])} · ${round(snow)} cm` });
       }
     }
     if (isSki(s)) {
-      const k = SESSION.ski, fresh = sf(i - 1) + sf(i - 2);
-      if (fresh >= k.freshMin && sf(i) < k.maxSnowfall && wind <= k.windMax && code < 95 && !isRain(code)) {
+      const fresh = sf(i - 1) + sf(i - 2);
+      if (fresh >= SKI.freshMin && sf(i) < SKI.maxSnowfall && wind <= SKI.windMax && code < 95 && !isRain(code)) {
         out.push({ i, kind: 'ski', far, txt: `poudreuse ${round(fresh)} cm` });
       }
     }
-    base += sf(i);
   }
   return out;
 }
@@ -119,7 +128,7 @@ function relevantSessions(s) {
 
 async function fetchWeather(spots) {
   const now = Date.now();
-  const cache = store.get('wxCache2', {});
+  const cache = store.get('wxCache3', {});
   const todo = spots.filter((s) => !(cache[s.id] && now - cache[s.id].t < CACHE_MIN * 60000));
   for (let i = 0; i < todo.length; i += 40) {
     const chunk = todo.slice(i, i + 40);
@@ -128,6 +137,7 @@ async function fetchWeather(spots) {
       longitude: chunk.map((s) => s.lon).join(','),
       elevation: chunk.map((s) => s.alt).join(','),
       current: 'temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,snowfall,snow_depth',
+      hourly: 'snow_depth',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant',
       timezone: 'Europe/Paris',
       past_days: String(PAST),
@@ -137,19 +147,30 @@ async function fetchWeather(spots) {
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
     let data = await res.json();
     if (!Array.isArray(data)) data = [data];
-    data.forEach((w, j) => { cache[chunk[j].id] = { t: now, w }; });
+    data.forEach((w, j) => {
+      // ne garder que la hauteur de neige à midi pour chaque jour (cache léger)
+      const h = w.hourly;
+      if (h) {
+        w.depth = w.daily.time.map((day) => { const k = h.time.indexOf(`${day}T12:00`); return k < 0 ? null : h.snow_depth[k]; });
+        delete w.hourly; delete w.hourly_units;
+      }
+      cache[chunk[j].id] = { t: now, w };
+    });
   }
   for (const k of Object.keys(cache)) if (now - cache[k].t > 6 * 3600000) delete cache[k];
-  store.set('wxCache2', cache);
-  try { localStorage.removeItem('wxCache'); } catch {}
+  store.set('wxCache3', cache);
+  try { localStorage.removeItem('wxCache'); localStorage.removeItem('wxCache2'); } catch {}
   for (const s of spots) if (cache[s.id]) state.weather[s.id] = cache[s.id].w;
 }
 
 /* ---------- filtrage ---------- */
-function spotsInRadius() {
+function allInRadius() {
   return state.spots
     .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
-    .filter((s) => s.dist <= state.radius)
+    .filter((s) => s.dist <= state.radius);
+}
+function spotsInRadius() {
+  return allInRadius()
     .filter((s) => state.type === 'all'
       || (state.type === 'kite' && isKite(s))
       || (state.type === 'ski' && isSki(s))
@@ -308,13 +329,18 @@ function render() {
          : 'Aucune session prévue dans les 14 jours dans ce rayon.')
     : (n ? `${n} spot${pl} dans un rayon de ${state.radius} km autour de ${state.loc.label}`
          : 'Aucun spot dans ce rayon — augmente la distance.');
-  if (state.view === 'map') renderMap(list, alertIds);
+  if (state.view === 'map') renderMap(alertIds);
   return { list, alerts };
 }
 
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
-function renderMap(list, alertIds) {
+function mapSpots() {
+  return allInRadius()
+    .filter((s) => (state.mapKite && isKite(s)) || (state.mapSki && isSki(s)))
+    .filter((s) => !state.sessionsOnly || relevantSessions(s).length);
+}
+function renderMap(alertIds) {
   if (!window.L) { $('#map').textContent = 'Carte indisponible.'; return; }
   if (!state.map) {
     state.map = L.map('map', { zoomControl: true, attributionControl: true });
@@ -325,7 +351,9 @@ function renderMap(list, alertIds) {
   }
   state.map.invalidateSize();
   state.markers.clearLayers();
-  const snow = cssVar('--snow'), good = cssVar('--good'), muted = cssVar('--muted');
+  const list = mapSpots();
+  $('#mapCount').textContent = `${list.length} sur la carte`;
+  const muted = cssVar('--muted');
   const pts = [[state.loc.lat, state.loc.lon]];
   L.circleMarker([state.loc.lat, state.loc.lon], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#111827', fillOpacity: 1 })
     .bindPopup('Ta position').addTo(state.markers);
@@ -335,26 +363,33 @@ function renderMap(list, alertIds) {
     const w = state.weather[s.id];
     const next72 = w ? summarize(w).next72 : 0;
     const ses = relevantSessions(s);
-    const color = alertIds.has(s.id) || next72 >= 5 ? snow : ses.length ? good : muted;
+    const st = alertIds.has(s.id) || next72 >= 5 ? 'snow' : ses.length ? 'sess' : '';
+    const kite = isKite(s);
+    const html = `<div class="mk ${kite ? 'kite' : 'ski'} ${st}">${icon(kite ? 'i-kite' : 'i-ski')}` +
+      (next72 >= 5 ? `<span class="mk-n">+${round(next72)}</span>` : '') + '</div>';
     const div = document.createElement('div');
     const b = document.createElement('b'); b.textContent = s.name; div.append(b);
-    div.insertAdjacentHTML('beforeend', `<br>${s.alt} m · ${round(s.dist)} km` +
-      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${round(w.current.wind_speed_10m)} km/h<br>+${round(next72)} cm sur 3 j` : '') +
+    div.insertAdjacentHTML('beforeend', `<br>${kite ? 'Spot snowkite' : 'Station'} · ${s.alt} m · ${round(s.dist)} km` +
+      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${round(w.current.wind_speed_10m)} km/h · ${round(snowDepth(w, T0))} cm au sol<br>+${round(next72)} cm prévus sur 3 j` : '') +
       (ses.length ? `<br>${ses.length} session${ses.length > 1 ? 's' : ''} · prochaine ${dayLong(w, ses[0].i)}` : '') +
       `<br><a href="#" data-goto="${esc(s.id)}">Voir la fiche</a>`);
-    L.circleMarker([s.lat, s.lon], {
-      radius: 5 + Math.min(next72, 50) / 6, color, weight: 2, fillColor: color, fillOpacity: 0.35,
+    L.marker([s.lat, s.lon], {
+      icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
+      zIndexOffset: kite ? 500 : 0,
     }).bindPopup(div).addTo(state.markers);
     pts.push([s.lat, s.lon]);
   }
-  state.map.fitBounds(pts, { padding: [24, 24], maxZoom: 9 });
+  if (!state.mapFitted || state.mapFitted !== `${state.loc.lat},${state.loc.lon},${state.radius}`) {
+    state.map.fitBounds(pts, { padding: [24, 24], maxZoom: 9 });
+    state.mapFitted = `${state.loc.lat},${state.loc.lon},${state.radius}`;
+  }
 }
 
 /* ---------- chargement ---------- */
 async function refresh(force = false) {
-  if (force) store.set('wxCache2', {});
-  const list = spotsInRadius();
-  $('#status').textContent = 'Chargement de la météo…';
+  if (force) store.set('wxCache3', {});
+  const list = allInRadius();
+  $('#status').textContent = `Chargement de la météo (${list.length} spots)…`;
   try {
     await fetchWeather(list);
   } catch (e) {
@@ -419,7 +454,12 @@ async function askNotif() {
 /* ---------- init ---------- */
 function goTo(id) {
   if (state.view !== 'list') document.querySelector('.tabs button[data-view="list"]').click();
-  document.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  let card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  if (!card) { // la fiche est masquée par un filtre : on revient sur « Tout »
+    document.querySelector('#typeFilter button[data-type="all"]').click();
+    card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  }
+  setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 function bindUI() {
   const radius = $('#radius');
@@ -468,6 +508,21 @@ function bindUI() {
     catch { prompt('Copie ce texte dans alerts-config.json :', txt); }
   };
 
+  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki']]) {
+    const el = $(btn); el.setAttribute('aria-pressed', state[key]);
+    el.onclick = () => { state[key] = !state[key]; store.set(key, state[key]); el.setAttribute('aria-pressed', state[key]); render(); };
+  }
+  for (const k of Object.keys(KITE_DEFAULT)) {
+    const el = $(`#k-${k}`), out = $(`#k-${k}-v`);
+    el.value = state.kite[k]; out.textContent = state.kite[k];
+    el.oninput = () => { out.textContent = el.value; };
+    el.onchange = () => {
+      state.kite[k] = +el.value;
+      if (state.kite.windMin > state.kite.windMax) { state.kite.windMax = state.kite.windMin; $('#k-windMax').value = state.kite.windMax; $('#k-windMax-v').textContent = state.kite.windMax; }
+      store.set('kite', state.kite); render();
+    };
+  }
+
   $('#btnGeo').onclick = geolocate;
   $('#locInput').oninput = (e) => searchCity(e.target.value);
   $('#btnRefresh').onclick = () => refresh(true);
@@ -477,7 +532,7 @@ function bindUI() {
       state.view = b.dataset.view;
       document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
       $('#list').hidden = state.view !== 'list';
-      $('#map').hidden = state.view !== 'map';
+      $('#mapWrap').hidden = state.view !== 'map';
       requestAnimationFrame(render); // la carte doit être visible pour calculer sa taille
     };
   });
@@ -492,8 +547,9 @@ function bindUI() {
 async function init() {
   bindUI();
   showLoc();
-  const res = await fetch('spots.json');
-  state.spots = await res.json();
+  const [cur, osm] = await Promise.all(['spots.json', 'spots-osm.json'].map((f) =>
+    fetch(f).then((r) => (r.ok ? r.json() : [])).catch(() => [])));
+  state.spots = [...cur, ...osm];
   await refresh();
   setInterval(() => refresh(), CHECK_EVERY_MIN * 60000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1,13 +1,14 @@
 # ❄️ Chute de Neige
 
-Petite appli web (installable sur téléphone) pour suivre les **spots de snowkite** et les **stations de ski** en France :
+Petite appli web (installable sur téléphone) pour suivre les **spots de snowkite** et les **stations de ski** en France (≈ 215 sites : une liste choisie à la main + toutes les stations d'OpenStreetMap) :
 
 - 📍 position par GPS ou par ville (Hyères par défaut) + **rayon réglable** (50 → 1200 km)
 - 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **14 jours** (neige, températures, vent)
 - 🪁 indicateur **vent kite** (bon entre 12 et 40 km/h, rafales < 55 km/h) et tri par conditions de vent
 - 📷 liens **webcams**, site de la station, Windy, itinéraire Google Maps, bulletin avalanche
-- 📅 mode **Sessions 14 j** : n'affiche que les spots où une session kite (bon vent + neige au sol) ou poudreuse (≥ 10 cm frais puis accalmie) est prévue dans les 2 semaines
-- 🗺️ vue **carte** (taille des points = neige prévue, vert = session prévue)
+- 📅 mode **Sessions 14 j** : n'affiche que les spots où une session kite (neige au sol + vent dans ta plage) ou poudreuse (≥ 10 cm frais puis accalmie) est prévue dans les 2 semaines
+- 🗺️ vue **carte** avec boutons pour afficher les spots kite (losanges) et/ou les stations (ronds) ; vert = session prévue, bleu = neige à venir
+- ⚙️ réglages de session kite : vent mini/maxi, rafales maxi, neige au sol mini
 - ⭐ favoris et 🔔 **alertes chute de neige par station** (seuil en cm sur 72 h), avec notification
 - fonctionne hors ligne avec les dernières données
 
@@ -31,6 +32,11 @@ Pour tester en local : `python3 -m http.server` puis ouvrir http://localhost:800
 2. Sur GitHub : **Settings → Secrets and variables → Actions → New repository secret**, nom `NTFY_TOPIC`, valeur = ton sujet.
 3. Dans l'appli, menu 🔔 Alertes → « Copier ma config d'alertes », et coller le résultat dans `alerts-config.json`.
 4. Le workflow `.github/workflows/alertes-neige.yml` vérifie toutes les 3 h et t'envoie une notification (une par spot et par jour maximum). Lancement manuel possible dans l'onglet **Actions**.
+
+## Liste des stations
+
+- `spots.json` : spots de snowkite et stations choisis à la main (modifiable).
+- `spots-osm.json` : toutes les autres stations de France, générées depuis OpenStreetMap par le workflow **Mise à jour des stations** (onglet Actions → Run workflow).
 
 ## Ajouter / modifier un spot
 

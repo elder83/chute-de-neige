@@ -83,12 +83,19 @@
         <option value="wind">Vent</option>
         <option value="session">Session</option>
       </select>
-      <button id="btnAlerts" class="icon-btn" title="Alertes" aria-label="Alertes"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button id="btnAlerts" class="icon-btn" title="Réglages et alertes" aria-label="Réglages et alertes"><svg class="i"><use href="#i-sliders"/></svg></button>
     </div>
   </section>
 
   <section class="panel" id="alertPanel" hidden>
-    <h2>Alertes chute de neige</h2>
+    <h2>Session snowkite</h2>
+    <p class="muted small">Une journée est une session kite s'il y a assez de neige au sol (fraîche ou non) et un vent dans ta plage.</p>
+    <label class="range"><span>Vent mini <b id="k-windMin-v"></b> km/h</span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
+    <label class="range"><span>Vent maxi <b id="k-windMax-v"></b> km/h</span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
+    <label class="range"><span>Rafales maxi <b id="k-gustMax-v"></b> km/h</span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
+    <label class="range"><span>Neige au sol mini <b id="k-minSnow-v"></b> cm</span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
+
+    <h2 class="sep">Alertes chute de neige</h2>
     <p class="muted small">Une alerte se déclenche quand la neige prévue sur 3 jours dépasse le seuil. Chaque station peut avoir son propre seuil (cloche sur la fiche).</p>
     <label class="range"><span>Seuil par défaut <b id="thrVal"></b> cm / 72 h</span>
       <input id="threshold" type="range" min="5" max="80" step="5">
@@ -105,10 +112,9 @@
       <small id="exportMsg" class="muted"></small>
     </details>
     <details>
-      <summary>Comment sont détectées les sessions ?</summary>
-      <p class="muted small"><b>Kite</b> : vent max entre 15 et 40 km/h, rafales &lt; 55 km/h, moins de 3 cm de neige dans la journée et au moins 15 cm au sol (estimés).<br>
-      <b>Poudreuse</b> : au moins 10 cm tombés les 2 jours précédents, puis une journée sans grosse chute (&lt; 3 cm), pas de pluie ni d'orage, vent &lt; 45 km/h.<br>
-      Au-delà de 7 jours, la prévision est indicative.</p>
+      <summary>Et les sessions ski ?</summary>
+      <p class="muted small"><b>Poudreuse</b> : au moins 10 cm tombés les 2 jours précédents, puis une journée sans grosse chute (&lt; 3 cm), sans pluie ni orage, vent &lt; 45 km/h.<br>
+      La neige au sol vient du modèle météo (hors neige de culture). Au-delà de 7 jours, la prévision est indicative.</p>
     </details>
   </section>
 
@@ -122,7 +128,17 @@
   <main>
     <p id="status" class="muted small"></p>
     <div id="list"></div>
-    <div id="map" hidden></div>
+    <div id="mapWrap" hidden>
+      <div class="map-bar">
+        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-kite"/></svg>Spots kite</button>
+        <button id="mapSki" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-ski"/></svg>Stations</button>
+        <span id="mapCount" class="muted small"></span>
+      </div>
+      <div id="map"></div>
+      <div class="legend muted small">
+        <span><i class="lg sess"></i>session prévue</span><span><i class="lg snow"></i>neige à venir (+cm sur 3 j)</span><span><i class="lg"></i>rien de prévu</span>
+      </div>
+    </div>
   </main>
 
   <footer class="muted">

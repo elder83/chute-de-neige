@@ -183,7 +183,35 @@ button { font: inherit; cursor: pointer; color: var(--text); }
 .links a:hover { color: var(--text); }
 .links .i { width: 15px; height: 15px; }
 
-#map { height: 68vh; min-height: 360px; border-radius: 16px; border: 1px solid var(--border); background: var(--faint); }
+#map { height: 64vh; min-height: 360px; border-radius: 16px; border: 1px solid var(--border); background: var(--faint); }
 .leaflet-popup-content { font-size: 13px; }
 .leaflet-container a { color: var(--accent); }
 footer { font-size: 12px; padding-bottom: 28px; }
+
+.panel h2.sep { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.map-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.map-bar #mapCount { margin-left: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); display: inline-block; background: var(--card); }
+.lg.sess { border-color: var(--good); }
+.lg.snow { border-color: var(--snow); }
+
+/* marqueurs carte */
+.mk-wrap { background: none; border: none; }
+.mk {
+  position: relative; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #ffffff; color: #374151; border: 2px solid #9ca3af;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.mk.kite { border-radius: 8px; transform: rotate(45deg); }
+.mk.kite .i { transform: rotate(-45deg); }
+.mk .i { width: 16px; height: 16px; }
+.mk.sess { border-color: #16a34a; color: #15803d; }
+.mk.snow { border-color: #2563eb; color: #1d4ed8; }
+.mk-n {
+  position: absolute; top: -9px; right: -12px; font: 600 10px/1 system-ui, sans-serif;
+  background: #2563eb; color: #fff; border-radius: 8px; padding: 2px 4px;
+}
+.mk.kite .mk-n { transform: rotate(-45deg); top: -12px; right: -14px; }
