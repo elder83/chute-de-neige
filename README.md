@@ -3,10 +3,11 @@
 Petite appli web (installable sur téléphone) pour suivre les **spots de snowkite** et les **stations de ski** en France :
 
 - 📍 position par GPS ou par ville (Hyères par défaut) + **rayon réglable** (50 → 1200 km)
-- 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **7 jours** (neige, températures, vent)
+- 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **14 jours** (neige, températures, vent)
 - 🪁 indicateur **vent kite** (bon entre 12 et 40 km/h, rafales < 55 km/h) et tri par conditions de vent
 - 📷 liens **webcams**, site de la station, Windy, itinéraire Google Maps, bulletin avalanche
-- 🗺️ vue **carte** (taille des points = neige prévue)
+- 📅 mode **Sessions 14 j** : n'affiche que les spots où une session kite (bon vent + neige au sol) ou poudreuse (≥ 10 cm frais puis accalmie) est prévue dans les 2 semaines
+- 🗺️ vue **carte** (taille des points = neige prévue, vert = session prévue)
 - ⭐ favoris et 🔔 **alertes chute de neige par station** (seuil en cm sur 72 h), avec notification
 - fonctionne hors ligne avec les dernières données
 

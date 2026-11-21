@@ -1,10 +1,17 @@
-/* Chute de Neige — spots snowkite & ski, météo, webcams, alertes neige */
+/* Chute de Neige — spots snowkite & ski, météo, sessions, webcams, alertes neige */
 'use strict';
 
 const HYERES = { lat: 43.1204, lon: 6.1286, label: 'Hyères (par défaut)' };
 const CACHE_MIN = 30;           // durée de cache météo (minutes)
 const CHECK_EVERY_MIN = 30;     // vérification des alertes appli ouverte
-const KITE_MIN = 12, KITE_MAX = 40, KITE_GUST_MAX = 55; // km/h
+const DAYS = 14;                // jours de prévision
+const PAST = 2;                 // jours passés (neige tombée)
+const T0 = PAST;                // index d'aujourd'hui dans les tableaux "daily"
+const KITE_MIN = 12, KITE_MAX = 40, KITE_GUST_MAX = 55;          // badge vent actuel (km/h)
+const SESSION = {
+  kite: { windMin: 15, windMax: 40, gustMax: 55, maxSnowfall: 3, minBase: 15 },
+  ski: { freshMin: 10, maxSnowfall: 3, windMax: 45 },
+};
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -14,13 +21,14 @@ const store = {
 
 const state = {
   spots: [],
-  weather: {},                       // id -> données Open-Meteo
+  weather: {},
   loc: store.get('loc', HYERES),
   radius: store.get('radius', 400),
   type: store.get('type', 'all'),
   sort: store.get('sort', 'dist'),
+  sessionsOnly: store.get('sessionsOnly', false),
   favs: new Set(store.get('favs', [])),
-  bells: store.get('bells', {}),     // id -> seuil cm
+  bells: store.get('bells', {}),
   threshold: store.get('threshold', 20),
   alertAll: store.get('alertAll', false),
   view: 'list',
@@ -36,48 +44,82 @@ function haversine(a, b) {
 }
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 const dirName = (deg) => deg == null ? '' : DIRS[Math.round(deg / 45) % 8];
-const arrow = (deg) => deg == null ? '' : `<span style="display:inline-block;transform:rotate(${deg + 180}deg)">↑</span>`;
-function wxIcon(code) {
-  if (code == null) return '·';
-  if (code === 0) return '☀️';
-  if (code <= 2) return '🌤️';
-  if (code === 3) return '☁️';
-  if (code <= 48) return '🌫️';
-  if (code <= 57) return '🌦️';
-  if (code <= 67) return '🌧️';
-  if (code <= 77) return '❄️';
-  if (code <= 82) return '🌧️';
-  if (code <= 86) return '🌨️';
-  return '⛈️';
+const icon = (id, cls = 'i') => `<svg class="${cls}"><use href="#${id}"/></svg>`;
+const arrow = (deg) => deg == null ? '' :
+  `<svg class="i" style="transform:rotate(${deg + 180}deg)"><use href="#i-route"/></svg>`;
+function wxId(code) {
+  if (code == null) return 'w-cloud';
+  if (code === 0) return 'w-sun';
+  if (code <= 2) return 'w-partly';
+  if (code === 3) return 'w-cloud';
+  if (code <= 48) return 'w-fog';
+  if (code <= 67) return 'w-rain';
+  if (code <= 77) return 'w-snow';
+  if (code <= 82) return 'w-rain';
+  if (code <= 86) return 'w-snow';
+  return 'w-storm';
 }
+const isRain = (c) => (c >= 51 && c <= 67) || (c >= 80 && c <= 82);
 const round = (v, d = 0) => v == null ? '–' : Number(v).toFixed(d);
 const sum = (arr) => arr.reduce((a, b) => a + (b || 0), 0);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dayDate = (w, i) => new Date(w.daily.time[i] + 'T12:00');
+const dayLabel = (w, i) => i === T0 ? 'Auj.' : i === T0 + 1 ? 'Dem.'
+  : dayDate(w, i).toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+const dayLong = (w, i) => i === T0 ? "aujourd'hui" : i === T0 + 1 ? 'demain'
+  : dayDate(w, i).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', '');
 
 function kiteRating(wind, gust) {
   if (wind == null) return null;
   if (wind < KITE_MIN) return { cls: 'warn', txt: 'Pas assez de vent' };
-  if (wind > KITE_MAX || (gust != null && gust > KITE_GUST_MAX)) return { cls: 'bad', txt: 'Trop fort / rafales' };
+  if (wind > KITE_MAX || (gust != null && gust > KITE_GUST_MAX)) return { cls: 'bad', txt: 'Trop fort' };
   return { cls: 'good', txt: 'Bon pour le kite' };
 }
 const isKite = (s) => s.type === 'kite' || s.type === 'both';
 const isSki = (s) => s.type === 'ski' || s.type === 'both';
 
 /* ---------- météo (Open-Meteo, sans clé) ---------- */
-// past_days=2 → daily[0..1] = les 2 derniers jours, daily[2] = aujourd'hui
 function summarize(w) {
-  const d = w.daily;
-  return {
-    past48: sum(d.snowfall_sum.slice(0, 2)),
-    next72: sum(d.snowfall_sum.slice(2, 5)),
-    next7: sum(d.snowfall_sum.slice(2, 9)),
-    todayWind: d.wind_speed_10m_max[2],
-  };
+  const sf = w.daily.snowfall_sum;
+  return { past48: sum(sf.slice(0, T0)), next72: sum(sf.slice(T0, T0 + 3)) };
+}
+
+/* Détection des sessions sur 14 jours */
+function sessionsFor(s, w) {
+  if (!w) return [];
+  const d = w.daily, out = [];
+  const sf = (i) => d.snowfall_sum[i] || 0;
+  let base = (w.current.snow_depth || 0) * 100; // cm au sol aujourd'hui (estimé)
+  for (let i = T0; i < d.time.length; i++) {
+    const code = d.weather_code[i], wind = d.wind_speed_10m_max[i], gust = d.wind_gusts_10m_max[i];
+    const far = i - T0 >= 7;
+    if (isKite(s)) {
+      const k = SESSION.kite;
+      if (wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax && sf(i) < k.maxSnowfall
+          && base >= k.minBase && code < 95 && !isRain(code)) {
+        out.push({ i, kind: 'kite', far, txt: `${round(wind)} km/h ${dirName(d.wind_direction_10m_dominant[i])}` });
+      }
+    }
+    if (isSki(s)) {
+      const k = SESSION.ski, fresh = sf(i - 1) + sf(i - 2);
+      if (fresh >= k.freshMin && sf(i) < k.maxSnowfall && wind <= k.windMax && code < 95 && !isRain(code)) {
+        out.push({ i, kind: 'ski', far, txt: `poudreuse ${round(fresh)} cm` });
+      }
+    }
+    base += sf(i);
+  }
+  return out;
+}
+function relevantSessions(s) {
+  const all = sessionsFor(s, state.weather[s.id]);
+  if (state.type === 'kite') return all.filter((x) => x.kind === 'kite');
+  if (state.type === 'ski') return all.filter((x) => x.kind === 'ski');
+  return all;
 }
 
 async function fetchWeather(spots) {
   const now = Date.now();
-  const cache = store.get('wxCache', {});
+  const cache = store.get('wxCache2', {});
   const todo = spots.filter((s) => !(cache[s.id] && now - cache[s.id].t < CACHE_MIN * 60000));
   for (let i = 0; i < todo.length; i += 40) {
     const chunk = todo.slice(i, i + 40);
@@ -88,8 +130,8 @@ async function fetchWeather(spots) {
       current: 'temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,snowfall,snow_depth',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant',
       timezone: 'Europe/Paris',
-      past_days: '2',
-      forecast_days: '7',
+      past_days: String(PAST),
+      forecast_days: String(DAYS),
     });
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
@@ -97,14 +139,14 @@ async function fetchWeather(spots) {
     if (!Array.isArray(data)) data = [data];
     data.forEach((w, j) => { cache[chunk[j].id] = { t: now, w }; });
   }
-  // purge des vieilles entrées
   for (const k of Object.keys(cache)) if (now - cache[k].t > 6 * 3600000) delete cache[k];
-  store.set('wxCache', cache);
+  store.set('wxCache2', cache);
+  try { localStorage.removeItem('wxCache'); } catch {}
   for (const s of spots) if (cache[s.id]) state.weather[s.id] = cache[s.id].w;
 }
 
 /* ---------- filtrage ---------- */
-function visibleSpots() {
+function spotsInRadius() {
   return state.spots
     .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
     .filter((s) => s.dist <= state.radius)
@@ -113,15 +155,20 @@ function visibleSpots() {
       || (state.type === 'ski' && isSki(s))
       || (state.type === 'fav' && state.favs.has(s.id)));
 }
+function visibleSpots() {
+  const list = spotsInRadius();
+  return state.sessionsOnly ? list.filter((s) => relevantSessions(s).length) : list;
+}
 function sortSpots(list) {
   const key = {
     dist: (s) => s.dist,
     snow: (s) => -(state.weather[s.id] ? summarize(state.weather[s.id]).next72 : -1),
     wind: (s) => {
       const w = state.weather[s.id]; if (!w) return 999;
-      const v = w.current.wind_speed_10m; // le plus proche de 25 km/h en premier
+      const v = w.current.wind_speed_10m;
       return isKite(s) ? Math.abs(v - 25) : 500 + Math.abs(v - 25);
     },
+    session: (s) => { const x = relevantSessions(s)[0]; return x ? x.i * 10000 + s.dist : 1e9 + s.dist; },
   }[state.sort];
   return list.sort((a, b) => key(a) - key(b));
 }
@@ -148,7 +195,7 @@ async function notify(alerts) {
   const fresh = alerts.filter((a) => sent[a.s.id] !== day);
   if (!fresh.length) return;
   const body = fresh.slice(0, 5).map((a) => `${a.s.name} : ${round(a.next72)} cm`).join('\n');
-  const title = `❄️ Neige annoncée sur ${fresh.length} spot${fresh.length > 1 ? 's' : ''}`;
+  const title = `Neige annoncée sur ${fresh.length} spot${fresh.length > 1 ? 's' : ''}`;
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) await reg.showNotification(title, { body, icon: 'icons/icon-192.png', tag: 'neige' });
@@ -161,7 +208,7 @@ function renderAlertsBanner(alerts) {
   const el = $('#alertsBanner');
   el.hidden = !alerts.length;
   el.innerHTML = alerts.map((a) =>
-    `<div class="alert" data-goto="${a.s.id}">❄️ <b>${esc(a.s.name)}</b> : ${round(a.next72)} cm prévus sur 3 jours <span class="muted">(seuil ${a.thr} cm · ${round(a.s.dist)} km)</span></div>`
+    `<div class="alert" data-goto="${esc(a.s.id)}">${icon('i-snow')}<span><b>${esc(a.s.name)}</b> · ${round(a.next72)} cm sur 3 jours <span class="muted">(seuil ${a.thr} cm)</span></span></div>`
   ).join('');
 }
 
@@ -169,12 +216,15 @@ function renderAlertsBanner(alerts) {
 function linksFor(s) {
   const L = [];
   const cam = s.webcam || `https://www.google.com/search?q=${encodeURIComponent('webcam live ' + s.name)}`;
-  L.push(['📷 Webcams', cam]);
-  if (s.web) L.push(['🌐 Site station', s.web]);
-  L.push(['💨 Windy', `https://www.windy.com/${s.lat}/${s.lon}?${s.lat},${s.lon},11`]);
-  L.push(['🚗 Itinéraire', `https://www.google.com/maps/dir/?api=1&origin=${state.loc.lat},${state.loc.lon}&destination=${s.lat},${s.lon}`]);
-  L.push(['⚠️ Bulletin avalanche', 'https://meteofrance.com/meteo-montagne']);
-  return L.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${t}</a>`).join('');
+  L.push(['i-camera', 'Webcams', cam]);
+  if (s.web) L.push(['i-globe', 'Site', s.web]);
+  L.push(['i-wind', 'Windy', `https://www.windy.com/${s.lat}/${s.lon}?${s.lat},${s.lon},11`]);
+  L.push(['i-route', 'Itinéraire', `https://www.google.com/maps/dir/?api=1&origin=${state.loc.lat},${state.loc.lon}&destination=${s.lat},${s.lon}`]);
+  L.push(['i-alert', 'Avalanche', 'https://meteofrance.com/meteo-montagne']);
+  return L.map(([ic, t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${icon(ic)}${t}</a>`).join('');
+}
+function typeIcons(s) {
+  return (isKite(s) ? icon('i-kite') : '') + (isSki(s) ? icon('i-ski') : '');
 }
 
 function renderCard(s, alerting) {
@@ -182,21 +232,23 @@ function renderCard(s, alerting) {
   const w = state.weather[s.id];
   node.dataset.id = s.id;
   node.classList.toggle('alerting', alerting);
-  node.querySelector('.name').textContent = `${isKite(s) ? '🪁' : ''}${isSki(s) ? '⛷️' : ''} ${s.name}`;
+  const h = node.querySelector('.name');
+  h.innerHTML = typeIcons(s);
+  h.append(s.name);
   node.querySelector('.meta').textContent = `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
   node.querySelector('.info').textContent = s.info || '';
   node.querySelector('.links').innerHTML = linksFor(s);
 
   const fav = node.querySelector('.fav');
-  fav.textContent = state.favs.has(s.id) ? '⭐' : '☆';
+  fav.classList.toggle('on', state.favs.has(s.id));
   fav.onclick = () => {
     state.favs.has(s.id) ? state.favs.delete(s.id) : state.favs.add(s.id);
     store.set('favs', [...state.favs]); render();
   };
   const bell = node.querySelector('.bell');
   const thr = state.bells[s.id];
-  bell.textContent = thr != null ? '🔔' : '🔕';
-  bell.title = thr != null ? `Alerte à ${thr} cm — cliquer pour modifier` : 'Créer une alerte neige';
+  bell.classList.toggle('on', thr != null);
+  bell.title = thr != null ? `Alerte à ${thr} cm — modifier` : 'Créer une alerte neige';
   bell.onclick = () => {
     const v = prompt(`Alerte neige pour ${s.name}\nSeuil en cm sur 72 h (vide = supprimer l'alerte) :`, thr ?? state.threshold);
     if (v === null) return;
@@ -214,26 +266,30 @@ function renderCard(s, alerting) {
   const c = w.current, sm = summarize(w);
   const kr = isKite(s) ? kiteRating(c.wind_speed_10m, c.wind_gusts_10m) : null;
   node.querySelector('.now').innerHTML = `
-    <span>${wxIcon(c.weather_code)} <b>${round(c.temperature_2m)}°C</b></span>
-    <span>💨 <b>${round(c.wind_speed_10m)}</b> km/h ${arrow(c.wind_direction_10m)} ${dirName(c.wind_direction_10m)} <span class="muted">(raf. ${round(c.wind_gusts_10m)})</span></span>
-    <span>🏔️ Neige au sol : <b>${c.snow_depth != null ? round(c.snow_depth * 100) : '–'}</b> cm</span>
-    <span>48 h : <b>${round(sm.past48)}</b> cm</span>
-    <span class="badge snow">+${round(sm.next72)} cm / 3 j</span>
-    ${kr ? `<span class="badge ${kr.cls}">${kr.txt}</span>` : ''}`;
+    <span>${icon(wxId(c.weather_code))}<b>${round(c.temperature_2m)}°</b></span>
+    <span title="Vent actuel, rafales ${round(c.wind_gusts_10m)} km/h">${kr ? `<i class="dot ${kr.cls}" title="${kr.txt}"></i>` : icon('i-wind')}<b>${round(c.wind_speed_10m)}</b> km/h ${arrow(c.wind_direction_10m)}${dirName(c.wind_direction_10m)}</span>
+    <span title="Neige au sol (estimée)">${icon('i-mountain')}<b>${c.snow_depth != null ? round(c.snow_depth * 100) : '–'}</b> cm</span>
+    <span title="Neige prévue sur 3 jours (48 h passées : ${round(sm.past48)} cm)">${icon('i-snow')}<b class="plus">+${round(sm.next72)}</b> cm / 3 j</span>`;
 
+  const sess = sessionsFor(s, w);
+  const shown = relevantSessions(s);
+  node.querySelector('.sessions').innerHTML = shown.slice(0, 6).map((x) =>
+    `<span class="sess ${x.kind}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(x.kind === 'kite' ? 'i-kite' : 'i-ski')}<b>${dayLong(w, x.i)}</b> ${x.txt}</span>`
+  ).join('') + (shown.length > 6 ? `<span class="sess muted">+${shown.length - 6}</span>` : '');
+
+  const byDay = {};
+  sess.forEach((x) => { byDay[x.i] = byDay[x.i] || x.kind; });
   const d = w.daily;
   let html = '';
-  for (let i = 2; i < d.time.length; i++) {
-    const date = new Date(d.time[i] + 'T12:00');
-    const lbl = i === 2 ? 'Auj.' : date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+  for (let i = T0; i < d.time.length; i++) {
     const sn = d.snowfall_sum[i] || 0;
-    const kd = isKite(s) ? kiteRating(d.wind_speed_10m_max[i], d.wind_gusts_10m_max[i]) : null;
-    html += `<div class="day${i === 2 ? ' today' : ''}" title="${date.toLocaleDateString('fr-FR')} · vent max ${round(d.wind_speed_10m_max[i])} km/h ${dirName(d.wind_direction_10m_dominant[i])}, rafales ${round(d.wind_gusts_10m_max[i])} km/h">
-      <div class="d">${lbl}</div>
-      <div class="w">${wxIcon(d.weather_code[i])}</div>
-      <div>${round(d.temperature_2m_min[i])}/${round(d.temperature_2m_max[i])}°</div>
+    const cls = ['day', i === T0 && 'today', byDay[i] && `s-${byDay[i]}`, i - T0 >= 7 && 'far'].filter(Boolean).join(' ');
+    html += `<div class="${cls}" title="${dayDate(w, i).toLocaleDateString('fr-FR')} · vent max ${round(d.wind_speed_10m_max[i])} km/h ${dirName(d.wind_direction_10m_dominant[i])}, rafales ${round(d.wind_gusts_10m_max[i])} km/h">
+      <div class="d">${dayLabel(w, i)}</div>
+      ${icon(wxId(d.weather_code[i]), 'i wx')}
+      <div class="t">${round(d.temperature_2m_min[i])}/${round(d.temperature_2m_max[i])}°</div>
       <div class="sn${sn < 0.5 ? ' zero' : ''}">${sn < 0.5 ? '0' : round(sn)} cm</div>
-      <div>${kd ? (kd.cls === 'good' ? '🪁' : kd.cls === 'bad' ? '🌪️' : '·') : ''}${round(d.wind_speed_10m_max[i])}</div>
+      <div class="wd">${round(d.wind_speed_10m_max[i])}</div>
     </div>`;
   }
   node.querySelector('.days').innerHTML = html;
@@ -242,68 +298,81 @@ function renderCard(s, alerting) {
 
 function render() {
   const list = sortSpots(visibleSpots());
-  const alerts = computeAlerts(list);
+  const alerts = computeAlerts(spotsInRadius());
   const alertIds = new Set(alerts.map((a) => a.s.id));
   renderAlertsBanner(alerts);
-  const el = $('#list');
-  el.replaceChildren(...list.map((s) => renderCard(s, alertIds.has(s.id))));
-  $('#status').textContent = list.length
-    ? `${list.length} spot${list.length > 1 ? 's' : ''} dans un rayon de ${state.radius} km autour de ${state.loc.label}`
-    : `Aucun spot dans ce rayon — augmente la distance.`;
+  $('#list').replaceChildren(...list.map((s) => renderCard(s, alertIds.has(s.id))));
+  const n = list.length, pl = n > 1 ? 's' : '';
+  $('#status').textContent = state.sessionsOnly
+    ? (n ? `${n} spot${pl} avec au moins une session dans les 14 jours · ${state.radius} km autour de ${state.loc.label}`
+         : 'Aucune session prévue dans les 14 jours dans ce rayon.')
+    : (n ? `${n} spot${pl} dans un rayon de ${state.radius} km autour de ${state.loc.label}`
+         : 'Aucun spot dans ce rayon — augmente la distance.');
   if (state.view === 'map') renderMap(list, alertIds);
   return { list, alerts };
 }
 
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
 function renderMap(list, alertIds) {
-  if (!window.L) { $('#map').textContent = 'Carte indisponible (hors ligne).'; return; }
+  if (!window.L) { $('#map').textContent = 'Carte indisponible.'; return; }
   if (!state.map) {
-    state.map = L.map('map');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    state.map = L.map('map', { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 17, attribution: '© OpenStreetMap',
     }).addTo(state.map);
     state.markers = L.layerGroup().addTo(state.map);
   }
+  state.map.invalidateSize();
   state.markers.clearLayers();
+  const snow = cssVar('--snow'), good = cssVar('--good'), muted = cssVar('--muted');
   const pts = [[state.loc.lat, state.loc.lon]];
-  L.circleMarker([state.loc.lat, state.loc.lon], { radius: 7, color: '#c0392b', fillOpacity: 1 })
-    .bindPopup('📍 Toi').addTo(state.markers);
-  L.circle([state.loc.lat, state.loc.lon], { radius: state.radius * 1000, color: '#2a8bd8', weight: 1, fillOpacity: 0.04 })
+  L.circleMarker([state.loc.lat, state.loc.lon], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#111827', fillOpacity: 1 })
+    .bindPopup('Ta position').addTo(state.markers);
+  L.circle([state.loc.lat, state.loc.lon], { radius: state.radius * 1000, color: muted, weight: 1, dashArray: '4 4', fill: false })
     .addTo(state.markers);
   for (const s of list) {
-    const w = state.weather[s.id]; const sm = w ? summarize(w) : null;
-    const snow = sm ? sm.next72 : 0;
-    const color = alertIds.has(s.id) ? '#3b82f6' : snow >= 5 ? '#60a5fa' : isKite(s) ? '#d97706' : '#0f4c81';
-    L.circleMarker([s.lat, s.lon], { radius: 6 + Math.min(snow, 50) / 5, color, fillOpacity: 0.8 })
-      .bindPopup(`<b>${esc(s.name)}</b><br>${s.alt} m · ${round(s.dist)} km<br>` +
-        (w ? `${wxIcon(w.current.weather_code)} ${round(w.current.temperature_2m)}°C · 💨 ${round(w.current.wind_speed_10m)} km/h<br>❄️ +${round(snow)} cm / 3 j<br>` : '') +
-        `<a href="#" data-goto="${s.id}">Voir la fiche</a>`)
-      .addTo(state.markers);
+    const w = state.weather[s.id];
+    const next72 = w ? summarize(w).next72 : 0;
+    const ses = relevantSessions(s);
+    const color = alertIds.has(s.id) || next72 >= 5 ? snow : ses.length ? good : muted;
+    const div = document.createElement('div');
+    const b = document.createElement('b'); b.textContent = s.name; div.append(b);
+    div.insertAdjacentHTML('beforeend', `<br>${s.alt} m · ${round(s.dist)} km` +
+      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${round(w.current.wind_speed_10m)} km/h<br>+${round(next72)} cm sur 3 j` : '') +
+      (ses.length ? `<br>${ses.length} session${ses.length > 1 ? 's' : ''} · prochaine ${dayLong(w, ses[0].i)}` : '') +
+      `<br><a href="#" data-goto="${esc(s.id)}">Voir la fiche</a>`);
+    L.circleMarker([s.lat, s.lon], {
+      radius: 5 + Math.min(next72, 50) / 6, color, weight: 2, fillColor: color, fillOpacity: 0.35,
+    }).bindPopup(div).addTo(state.markers);
     pts.push([s.lat, s.lon]);
   }
-  state.map.fitBounds(pts, { padding: [20, 20], maxZoom: 9 });
-  setTimeout(() => state.map.invalidateSize(), 50);
+  state.map.fitBounds(pts, { padding: [24, 24], maxZoom: 9 });
 }
 
 /* ---------- chargement ---------- */
 async function refresh(force = false) {
-  if (force) store.set('wxCache', {});
-  const list = visibleSpots();
+  if (force) store.set('wxCache2', {});
+  const list = spotsInRadius();
   $('#status').textContent = 'Chargement de la météo…';
   try {
     await fetchWeather(list);
   } catch (e) {
     console.error(e);
+    render();
     $('#status').textContent = 'Impossible de charger la météo (connexion ?). Données en cache affichées.';
+    return;
   }
   const { alerts } = render();
   notify(alerts);
 }
 
 /* ---------- position ---------- */
+function showLoc() {
+  $('#locLabel').textContent = `${state.loc.label} · ${state.loc.lat.toFixed(3)}, ${state.loc.lon.toFixed(3)}`;
+}
 function setLoc(loc) {
-  state.loc = loc; store.set('loc', loc);
-  $('#locLabel').textContent = `${loc.label} (${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)})`;
-  refresh();
+  state.loc = loc; store.set('loc', loc); showLoc(); refresh();
 }
 function geolocate() {
   if (!navigator.geolocation) return alert('Géolocalisation non disponible');
@@ -339,17 +408,19 @@ function searchCity(q) {
 
 /* ---------- notifications ---------- */
 function notifStateText() {
-  if (!('Notification' in window)) return 'Non supporté sur ce navigateur (sur iPhone : ajoute l\'appli à l\'écran d\'accueil).';
-  return { granted: '✅ activées', denied: '❌ bloquées dans les réglages du navigateur', default: '' }[Notification.permission];
+  if (!('Notification' in window)) return "Non supporté ici (sur iPhone : ajoute l'appli à l'écran d'accueil).";
+  return { granted: 'Activées', denied: 'Bloquées dans les réglages du navigateur', default: '' }[Notification.permission];
 }
 async function askNotif() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    await Notification.requestPermission();
-  }
+  if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
   $('#notifState').textContent = notifStateText();
 }
 
 /* ---------- init ---------- */
+function goTo(id) {
+  if (state.view !== 'list') document.querySelector('.tabs button[data-view="list"]').click();
+  document.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 function bindUI() {
   const radius = $('#radius');
   radius.value = state.radius; $('#radiusVal').textContent = state.radius;
@@ -364,6 +435,14 @@ function bindUI() {
       refresh();
     };
   });
+  const ses = $('#btnSessions');
+  ses.setAttribute('aria-pressed', state.sessionsOnly);
+  ses.onclick = () => {
+    state.sessionsOnly = !state.sessionsOnly; store.set('sessionsOnly', state.sessionsOnly);
+    ses.setAttribute('aria-pressed', state.sessionsOnly);
+    if (state.sessionsOnly && state.sort === 'dist') { state.sort = 'session'; $('#sort').value = 'session'; store.set('sort', 'session'); }
+    render();
+  };
   const sort = $('#sort'); sort.value = state.sort;
   sort.onchange = () => { state.sort = sort.value; store.set('sort', state.sort); render(); };
 
@@ -385,7 +464,7 @@ function bindUI() {
       spots: state.bells,
     };
     const txt = JSON.stringify(cfg, null, 2);
-    try { await navigator.clipboard.writeText(txt); $('#exportMsg').textContent = 'Copié ! Colle-le dans alerts-config.json.'; }
+    try { await navigator.clipboard.writeText(txt); $('#exportMsg').textContent = 'Copié. Colle-le dans alerts-config.json.'; }
     catch { prompt('Copie ce texte dans alerts-config.json :', txt); }
   };
 
@@ -399,25 +478,20 @@ function bindUI() {
       document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
       $('#list').hidden = state.view !== 'list';
       $('#map').hidden = state.view !== 'map';
-      render();
+      requestAnimationFrame(render); // la carte doit être visible pour calculer sa taille
     };
   });
-  $('#alertsBanner').addEventListener('click', (e) => {
+  const goto = (e) => {
     const a = e.target.closest('[data-goto]'); if (!a) return;
-    if (state.view !== 'list') document.querySelector('.tabs button[data-view="list"]').click();
-    document.querySelector(`.card[data-id="${CSS.escape(a.dataset.goto)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
-  $('#map').addEventListener('click', (e) => {
-    const a = e.target.closest('[data-goto]'); if (!a) return;
-    e.preventDefault();
-    document.querySelector('.tabs button[data-view="list"]').click();
-    document.querySelector(`.card[data-id="${CSS.escape(a.dataset.goto)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
+    e.preventDefault(); goTo(a.dataset.goto);
+  };
+  $('#alertsBanner').addEventListener('click', goto);
+  $('#map').addEventListener('click', goto);
 }
 
 async function init() {
   bindUI();
-  $('#locLabel').textContent = `${state.loc.label} (${state.loc.lat.toFixed(3)}, ${state.loc.lon.toFixed(3)})`;
+  showLoc();
   const res = await fetch('spots.json');
   state.spots = await res.json();
   await refresh();

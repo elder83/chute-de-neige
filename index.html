@@ -4,112 +4,153 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chute de Neige</title>
-  <meta name="description" content="Spots de snowkite et stations de ski en France : météo, neige, vent, webcams et alertes chute de neige.">
-  <meta name="theme-color" content="#0f4c81">
+  <meta name="description" content="Spots de snowkite et stations de ski en France : météo, neige, vent, webcams, sessions et alertes chute de neige.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Icônes (trait fin) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-snow" viewBox="0 0 24 24"><path d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></symbol>
+      <symbol id="i-wind" viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h6"/></symbol>
+      <symbol id="i-kite" viewBox="0 0 24 24"><path d="M3 8c5-5.5 13-5.5 18 0M3 8l9 13 9-13"/><circle cx="12" cy="21" r=".6"/></symbol>
+      <symbol id="i-ski" viewBox="0 0 24 24"><circle cx="16" cy="4.5" r="1.8"/><path d="m7 11 4.5-2.5 3 3.5 4 1M3 17l18 5M10 13l-2 5"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.8 6.2.8-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.8z"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+      <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m8 7 2-3h4l2 3"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8z"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 22 20H2zM12 10v4.5M12 17.5v.5"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+      <symbol id="i-mountain" viewBox="0 0 24 24"><path d="m2 20 7-12 4 6 3-4 6 10z"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+      <!-- météo -->
+      <symbol id="w-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="w-partly" viewBox="0 0 24 24"><path d="M9 3v1.5M3.5 9H5M5 5l1 1M13 5l-1 1"/><path d="M6.3 11.5A3.5 3.5 0 1 1 12.4 8"/><path d="M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.5A2.8 2.8 0 0 0 8 20z"/></symbol>
+      <symbol id="w-cloud" viewBox="0 0 24 24"><path d="M7 19h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 2A3 3 0 0 0 7 19z"/></symbol>
+      <symbol id="w-fog" viewBox="0 0 24 24"><path d="M4 9h16M3 13h18M5 17h14"/></symbol>
+      <symbol id="w-rain" viewBox="0 0 24 24"><path d="M7 15h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 2A3 3 0 0 0 7 15zM8 18l-1 3M12 18l-1 3M16 18l-1 3"/></symbol>
+      <symbol id="w-snow" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 2A3 3 0 0 0 7 14z"/><path d="M8 18h.01M12 18h.01M16 18h.01M10 21h.01M14 21h.01" stroke-width="2.6"/></symbol>
+      <symbol id="w-storm" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 2A3 3 0 0 0 7 14zM13 15l-3 4h4l-3 4"/></symbol>
+    </defs>
+  </svg>
+
   <header class="top">
-    <h1>❄️ Chute de Neige</h1>
-    <button id="btnRefresh" class="icon-btn" title="Actualiser">⟳</button>
+    <h1><svg class="i"><use href="#i-snow"/></svg> Chute de neige</h1>
+    <button id="btnRefresh" class="icon-btn" title="Actualiser" aria-label="Actualiser"><svg class="i"><use href="#i-refresh"/></svg></button>
   </header>
 
   <section class="panel" id="settings">
-    <div class="row">
-      <label class="grow">📍 Position
-        <div class="loc">
-          <input id="locInput" type="text" placeholder="Ville (ex : Hyères)" autocomplete="off">
-          <button id="btnGeo" title="Me localiser">🎯</button>
-        </div>
-        <ul id="locResults" class="results" hidden></ul>
-        <small id="locLabel" class="muted"></small>
-      </label>
+    <div class="loc">
+      <svg class="i muted"><use href="#i-pin"/></svg>
+      <input id="locInput" type="text" placeholder="Ville (ex : Hyères)" autocomplete="off">
+      <button id="btnGeo" class="icon-btn" title="Me localiser" aria-label="Me localiser"><svg class="i"><use href="#i-locate"/></svg></button>
     </div>
-    <div class="row">
-      <label class="grow">Rayon : <b id="radiusVal"></b> km
-        <input id="radius" type="range" min="50" max="1200" step="25">
-      </label>
-    </div>
-    <div class="row chips" id="typeFilter">
+    <ul id="locResults" class="results" hidden></ul>
+    <small id="locLabel" class="muted"></small>
+
+    <label class="range">
+      <span>Rayon <b id="radiusVal"></b> km</span>
+      <input id="radius" type="range" min="50" max="1200" step="25">
+    </label>
+
+    <div class="chips" id="typeFilter">
       <button data-type="all">Tout</button>
-      <button data-type="kite">🪁 Snowkite</button>
-      <button data-type="ski">⛷️ Ski</button>
-      <button data-type="fav">⭐ Favoris</button>
+      <button data-type="kite"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
+      <button data-type="ski"><svg class="i"><use href="#i-ski"/></svg>Ski</button>
+      <button data-type="fav"><svg class="i"><use href="#i-star"/></svg>Favoris</button>
     </div>
+
     <div class="row">
-      <label>Trier par
-        <select id="sort">
-          <option value="dist">Distance</option>
-          <option value="snow">Neige à venir</option>
-          <option value="wind">Vent (kite)</option>
-        </select>
-      </label>
-      <button id="btnAlerts" class="secondary">🔔 Alertes</button>
+      <button id="btnSessions" class="toggle" aria-pressed="false">
+        <svg class="i"><use href="#i-cal"/></svg>Sessions 14 j
+      </button>
+      <select id="sort" aria-label="Trier par">
+        <option value="dist">Distance</option>
+        <option value="snow">Neige</option>
+        <option value="wind">Vent</option>
+        <option value="session">Session</option>
+      </select>
+      <button id="btnAlerts" class="icon-btn" title="Alertes" aria-label="Alertes"><svg class="i"><use href="#i-bell"/></svg></button>
     </div>
   </section>
 
   <section class="panel" id="alertPanel" hidden>
-    <h2>🔔 Alertes chute de neige</h2>
-    <p class="muted">Une alerte se déclenche quand la neige prévue sur 3 jours dépasse le seuil. Chaque station peut avoir son propre seuil (bouton 🔔 sur la fiche).</p>
-    <label>Seuil par défaut : <b id="thrVal"></b> cm / 72 h
+    <h2>Alertes chute de neige</h2>
+    <p class="muted small">Une alerte se déclenche quand la neige prévue sur 3 jours dépasse le seuil. Chaque station peut avoir son propre seuil (cloche sur la fiche).</p>
+    <label class="range"><span>Seuil par défaut <b id="thrVal"></b> cm / 72 h</span>
       <input id="threshold" type="range" min="5" max="80" step="5">
     </label>
-    <label class="check"><input type="checkbox" id="alertAll"> Alerter pour <b>tous</b> les spots dans mon rayon (sinon seulement ceux avec 🔔)</label>
+    <label class="check"><input type="checkbox" id="alertAll"> Alerter pour tous les spots dans mon rayon (sinon seulement ceux avec une cloche)</label>
     <div class="row">
-      <button id="btnNotif">Activer les notifications</button>
-      <span id="notifState" class="muted"></span>
+      <button id="btnNotif" class="btn">Activer les notifications</button>
+      <span id="notifState" class="muted small"></span>
     </div>
     <details>
-      <summary>Recevoir les alertes même appli fermée (ntfy)</summary>
-      <p class="muted">Installe l'appli gratuite <b>ntfy</b> sur ton téléphone et abonne-toi à un sujet secret (ex : <code>neige-hyeres-8f3k</code>). Copie ta config ci-dessous dans le fichier <code>alerts-config.json</code> du dépôt : une tâche GitHub vérifie la météo toutes les 3 h et t'envoie une notification (voir README).</p>
-      <button id="btnExport" class="secondary">Copier ma config d'alertes</button>
+      <summary>Alertes même appli fermée (ntfy)</summary>
+      <p class="muted small">Copie ta config et colle-la dans <code>alerts-config.json</code> sur GitHub. La vérification tourne toutes les 3 h (voir README). Localise-toi avec une ville plutôt qu'avec le GPS : ce fichier est public.</p>
+      <button id="btnExport" class="btn ghost">Copier ma config d'alertes</button>
       <small id="exportMsg" class="muted"></small>
+    </details>
+    <details>
+      <summary>Comment sont détectées les sessions ?</summary>
+      <p class="muted small"><b>Kite</b> : vent max entre 15 et 40 km/h, rafales &lt; 55 km/h, moins de 3 cm de neige dans la journée et au moins 15 cm au sol (estimés).<br>
+      <b>Poudreuse</b> : au moins 10 cm tombés les 2 jours précédents, puis une journée sans grosse chute (&lt; 3 cm), pas de pluie ni d'orage, vent &lt; 45 km/h.<br>
+      Au-delà de 7 jours, la prévision est indicative.</p>
     </details>
   </section>
 
   <section id="alertsBanner" hidden></section>
 
   <nav class="tabs">
-    <button data-view="list" class="active">Liste</button>
-    <button data-view="map">Carte</button>
+    <button data-view="list" class="active"><svg class="i"><use href="#i-list"/></svg>Liste</button>
+    <button data-view="map"><svg class="i"><use href="#i-map"/></svg>Carte</button>
   </nav>
 
   <main>
-    <p id="status" class="muted"></p>
+    <p id="status" class="muted small"></p>
     <div id="list"></div>
     <div id="map" hidden></div>
   </main>
 
   <footer class="muted">
-    Météo : <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (modèles Météo-France AROME/ARPEGE, ECMWF…).
+    Météo <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (Météo-France, ECMWF…) · carte © OpenStreetMap.
     Distances à vol d'oiseau. Vérifie toujours le BRA et l'ouverture des routes avant de partir.
   </footer>
 
   <template id="cardTpl">
     <article class="card">
       <div class="card-head">
-        <div>
+        <div class="title">
           <h3 class="name"></h3>
           <div class="meta muted"></div>
         </div>
         <div class="actions">
-          <button class="fav icon-btn" title="Favori">☆</button>
-          <button class="bell icon-btn" title="Alerte neige">🔕</button>
+          <button class="fav icon-btn" title="Favori" aria-label="Favori"><svg class="i"><use href="#i-star"/></svg></button>
+          <button class="bell icon-btn" title="Alerte neige" aria-label="Alerte neige"><svg class="i"><use href="#i-bell"/></svg></button>
         </div>
       </div>
       <div class="now"></div>
+      <div class="sessions"></div>
       <div class="days"></div>
       <p class="info muted"></p>
       <div class="links"></div>
     </article>
   </template>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
