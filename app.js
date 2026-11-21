@@ -405,6 +405,7 @@ async function refresh(force = false) {
 /* ---------- position ---------- */
 function showLoc() {
   $('#locLabel').textContent = `${state.loc.label} · ${state.loc.lat.toFixed(3)}, ${state.loc.lon.toFixed(3)}`;
+  $('#placeTxt').textContent = `${state.loc.label.replace(' (par défaut)', '')} · ${state.radius} km`;
 }
 function setLoc(loc) {
   state.loc = loc; store.set('loc', loc); showLoc(); refresh();
@@ -465,7 +466,7 @@ function bindUI() {
   const radius = $('#radius');
   radius.value = state.radius; $('#radiusVal').textContent = state.radius;
   radius.oninput = () => { $('#radiusVal').textContent = radius.value; };
-  radius.onchange = () => { state.radius = +radius.value; store.set('radius', state.radius); refresh(); };
+  radius.onchange = () => { state.radius = +radius.value; store.set('radius', state.radius); showLoc(); refresh(); };
 
   document.querySelectorAll('#typeFilter button').forEach((b) => {
     b.classList.toggle('active', b.dataset.type === state.type);
@@ -486,7 +487,18 @@ function bindUI() {
   const sort = $('#sort'); sort.value = state.sort;
   sort.onchange = () => { state.sort = sort.value; store.set('sort', state.sort); render(); };
 
-  $('#btnAlerts').onclick = () => { $('#alertPanel').hidden = !$('#alertPanel').hidden; };
+  const dlg = $('#settingsDlg');
+  const openSettings = () => { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); };
+  $('#btnSettings').onclick = openSettings;
+  $('#placePill').onclick = openSettings;
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg || e.target.closest('[data-close]')) dlg.close ? dlg.close() : dlg.removeAttribute('open');
+  });
+  $('#kiteReset').onclick = () => {
+    state.kite = { ...KITE_DEFAULT }; store.set('kite', state.kite);
+    for (const k of Object.keys(KITE_DEFAULT)) { $(`#k-${k}`).value = state.kite[k]; $(`#k-${k}-v`).textContent = state.kite[k]; }
+    render();
+  };
   const thr = $('#threshold');
   thr.value = state.threshold; $('#thrVal').textContent = state.threshold;
   thr.oninput = () => { $('#thrVal').textContent = thr.value; };

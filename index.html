@@ -35,6 +35,8 @@
       <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
       <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
       <symbol id="i-mountain" viewBox="0 0 24 24"><path d="m2 20 7-12 4 6 3-4 6 10z"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
       <!-- météo -->
       <symbol id="w-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
@@ -49,30 +51,22 @@
 
   <header class="top">
     <h1><svg class="i"><use href="#i-snow"/></svg> Chute de neige</h1>
-    <button id="btnRefresh" class="icon-btn" title="Actualiser" aria-label="Actualiser"><svg class="i"><use href="#i-refresh"/></svg></button>
+    <div class="top-actions">
+      <button id="btnRefresh" class="icon-btn" title="Actualiser" aria-label="Actualiser"><svg class="i"><use href="#i-refresh"/></svg></button>
+      <button id="btnSettings" class="icon-btn" title="Paramètres" aria-label="Paramètres"><svg class="i"><use href="#i-gear"/></svg></button>
+    </div>
   </header>
 
-  <section class="panel" id="settings">
-    <div class="loc">
-      <svg class="i muted"><use href="#i-pin"/></svg>
-      <input id="locInput" type="text" placeholder="Ville (ex : Hyères)" autocomplete="off">
-      <button id="btnGeo" class="icon-btn" title="Me localiser" aria-label="Me localiser"><svg class="i"><use href="#i-locate"/></svg></button>
-    </div>
-    <ul id="locResults" class="results" hidden></ul>
-    <small id="locLabel" class="muted"></small>
-
-    <label class="range">
-      <span>Rayon <b id="radiusVal"></b> km</span>
-      <input id="radius" type="range" min="50" max="1200" step="25">
-    </label>
-
+  <section class="bar" id="settings">
+    <button id="placePill" class="pill" title="Changer la position ou le rayon">
+      <svg class="i"><use href="#i-pin"/></svg><span id="placeTxt"></span>
+    </button>
     <div class="chips" id="typeFilter">
       <button data-type="all">Tout</button>
       <button data-type="kite"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
       <button data-type="ski"><svg class="i"><use href="#i-ski"/></svg>Ski</button>
       <button data-type="fav"><svg class="i"><use href="#i-star"/></svg>Favoris</button>
     </div>
-
     <div class="row">
       <button id="btnSessions" class="toggle" aria-pressed="false">
         <svg class="i"><use href="#i-cal"/></svg>Sessions 14 j
@@ -83,40 +77,61 @@
         <option value="wind">Vent</option>
         <option value="session">Session</option>
       </select>
-      <button id="btnAlerts" class="icon-btn" title="Réglages et alertes" aria-label="Réglages et alertes"><svg class="i"><use href="#i-sliders"/></svg></button>
     </div>
   </section>
 
-  <section class="panel" id="alertPanel" hidden>
-    <h2>Session snowkite</h2>
-    <p class="muted small">Une journée est une session kite s'il y a assez de neige au sol (fraîche ou non) et un vent dans ta plage.</p>
-    <label class="range"><span>Vent mini <b id="k-windMin-v"></b> km/h</span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
-    <label class="range"><span>Vent maxi <b id="k-windMax-v"></b> km/h</span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
-    <label class="range"><span>Rafales maxi <b id="k-gustMax-v"></b> km/h</span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
-    <label class="range"><span>Neige au sol mini <b id="k-minSnow-v"></b> cm</span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
-
-    <h2 class="sep">Alertes chute de neige</h2>
-    <p class="muted small">Une alerte se déclenche quand la neige prévue sur 3 jours dépasse le seuil. Chaque station peut avoir son propre seuil (cloche sur la fiche).</p>
-    <label class="range"><span>Seuil par défaut <b id="thrVal"></b> cm / 72 h</span>
-      <input id="threshold" type="range" min="5" max="80" step="5">
-    </label>
-    <label class="check"><input type="checkbox" id="alertAll"> Alerter pour tous les spots dans mon rayon (sinon seulement ceux avec une cloche)</label>
-    <div class="row">
-      <button id="btnNotif" class="btn">Activer les notifications</button>
-      <span id="notifState" class="muted small"></span>
+  <dialog id="settingsDlg" class="sheet" aria-labelledby="dlgTitle">
+    <div class="sheet-head">
+      <h2 id="dlgTitle">Paramètres</h2>
+      <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
     </div>
-    <details>
-      <summary>Alertes même appli fermée (ntfy)</summary>
-      <p class="muted small">Copie ta config et colle-la dans <code>alerts-config.json</code> sur GitHub. La vérification tourne toutes les 3 h (voir README). Localise-toi avec une ville plutôt qu'avec le GPS : ce fichier est public.</p>
-      <button id="btnExport" class="btn ghost">Copier ma config d'alertes</button>
-      <small id="exportMsg" class="muted"></small>
-    </details>
-    <details>
-      <summary>Et les sessions ski ?</summary>
-      <p class="muted small"><b>Poudreuse</b> : au moins 10 cm tombés les 2 jours précédents, puis une journée sans grosse chute (&lt; 3 cm), sans pluie ni orage, vent &lt; 45 km/h.<br>
-      La neige au sol vient du modèle météo (hors neige de culture). Au-delà de 7 jours, la prévision est indicative.</p>
-    </details>
-  </section>
+    <div class="sheet-body">
+      <section>
+        <h3>Position</h3>
+        <div class="loc">
+          <svg class="i muted"><use href="#i-pin"/></svg>
+          <input id="locInput" type="text" placeholder="Ville (ex : Hyères)" autocomplete="off">
+          <button id="btnGeo" class="icon-btn" title="Me localiser" aria-label="Me localiser"><svg class="i"><use href="#i-locate"/></svg></button>
+        </div>
+        <ul id="locResults" class="results" hidden></ul>
+        <small id="locLabel" class="muted"></small>
+        <label class="range"><span>Rayon <b><output id="radiusVal"></output> km</b></span>
+          <input id="radius" type="range" min="50" max="1200" step="25"></label>
+      </section>
+
+      <section>
+        <h3>Session snowkite</h3>
+        <p class="muted small">Neige au sol (fraîche ou non) + vent dans ta plage.</p>
+        <label class="range"><span>Vent mini <b><output id="k-windMin-v"></output> km/h</b></span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
+        <label class="range"><span>Vent maxi <b><output id="k-windMax-v"></output> km/h</b></span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
+        <label class="range"><span>Rafales maxi <b><output id="k-gustMax-v"></output> km/h</b></span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
+        <label class="range"><span>Neige au sol mini <b><output id="k-minSnow-v"></output> cm</b></span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
+        <button id="kiteReset" class="link small">Valeurs par défaut</button>
+      </section>
+
+      <section>
+        <h3>Alertes neige</h3>
+        <p class="muted small">Neige prévue sur 3 jours au-dessus du seuil. Seuil par station : cloche sur la fiche.</p>
+        <label class="range"><span>Seuil par défaut <b><output id="thrVal"></output> cm</b></span>
+          <input id="threshold" type="range" min="5" max="80" step="5"></label>
+        <label class="switch"><span>Tous les spots dans mon rayon</span><input type="checkbox" id="alertAll"></label>
+        <div class="row">
+          <button id="btnNotif" class="btn">Activer les notifications</button>
+          <span id="notifState" class="muted small"></span>
+        </div>
+        <details>
+          <summary>Alertes appli fermée (ntfy)</summary>
+          <p class="muted small">Copie ta config et colle-la dans <code>alerts-config.json</code> sur GitHub (vérification toutes les 3 h). Ce fichier est public : localise-toi avec une ville plutôt qu'avec le GPS.</p>
+          <button id="btnExport" class="btn ghost">Copier ma config</button>
+          <small id="exportMsg" class="muted"></small>
+        </details>
+        <details>
+          <summary>Sessions ski : comment ça marche ?</summary>
+          <p class="muted small">Poudreuse : au moins 10 cm tombés les 2 jours précédents, puis une journée sans grosse chute (&lt; 3 cm), sans pluie ni orage, vent &lt; 45 km/h. Au-delà de 7 jours, la prévision est indicative.</p>
+        </details>
+      </section>
+    </div>
+  </dialog>
 
   <section id="alertsBanner" hidden></section>
 
