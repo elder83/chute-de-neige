@@ -1,6 +1,6 @@
 # ❄️ Chute de Neige
 
-Petite appli web (installable sur téléphone) pour suivre les **spots de snowkite** et les **stations de ski** en France (≈ 215 sites : une liste choisie à la main + toutes les stations d'OpenStreetMap) :
+Petite appli web (installable sur téléphone) pour suivre les **spots de snowkite** et les **stations de ski** en France (≈ 235 sites, dont 50 spots de snowkite : une liste choisie à la main + toutes les stations d'OpenStreetMap) :
 
 - 📍 position par GPS ou par ville (Hyères par défaut) + **rayon réglable** (50 → 1200 km)
 - 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **14 jours** (neige, températures, vent)

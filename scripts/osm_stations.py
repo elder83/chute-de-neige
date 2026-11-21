@@ -21,7 +21,10 @@ EXCLUDE = {"Courmayeur", "La Thuile", "Riserva Bianca – Limone Piemonte", "Est
 # Sites aussi connus pour le snowkite
 KITE = {"Snowkite Markstein": ("kite", "Site de snowkite du Markstein, crêtes vosgiennes"),
         "Plans d'Hotonnes - Plateau de Retord": ("both", "Plateau de Retord, grands espaces ouverts pour le snowkite"),
-        "Les Estables": ("both", "Massif du Mézenc, spot de snowkite réputé")}
+        "Les Estables": ("both", "Massif du Mézenc, spot de snowkite réputé"),
+        "Prabouré": ("both", "Hautes Chaumes du Forez, 10 000 ha de plateaux pour le snowkite"),
+        "Porte Puymorens": ("both", "École de snowkite au col du Puymorens"),
+        "Roubion-Les-Buisses": ("both", "Snowkite à la Tête du Pommier")}
 
 
 def norm(s):
@@ -30,7 +33,8 @@ def norm(s):
 
 def clean(spots, curated):
     """Retire stations étrangères et doublons de la liste manuelle, ajoute les types kite."""
-    names = [norm(t["name"].split(" – ")[0]) for t in curated]
+    # seules les stations de la liste manuelle comptent comme doublons (pas les spots kite)
+    names = [norm(t["name"].split(" – ")[0]) for t in curated if t["type"] != "kite"]
     out = []
     for s in spots:
         if s["name"] in EXCLUDE: continue
@@ -84,7 +88,7 @@ def main():
     kept = []
     for c in cands:
         p = (c["lat"], c["lon"])
-        if any(km(p, (s["lat"], s["lon"])) < 4 for s in curated): continue
+        if any(km(p, (s["lat"], s["lon"])) < 4 for s in curated if s["type"] != "kite"): continue
         if any(km(p, (k["lat"], k["lon"])) < 2.5 or (k["name"].lower() == c["name"].lower() and km(p, (k["lat"], k["lon"])) < 15) for k in kept): continue
         kept.append(c)
     print("stations retenues :", len(kept))
