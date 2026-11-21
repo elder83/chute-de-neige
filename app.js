@@ -452,6 +452,23 @@ async function askNotif() {
   $('#notifState').textContent = notifStateText();
 }
 
+/* ---------- partage ---------- */
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function shareApp() {
+  const url = location.origin + location.pathname.replace(/index\.html$/, '');
+  try { await navigator.clipboard.writeText(url); toast('Lien copié'); }
+  catch { prompt("Copie le lien de l'appli :", url); }
+  // feuille de partage native sur téléphone (Messages, WhatsApp…)
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Chute de neige', text: 'Spots snowkite & ski : météo, sessions et alertes neige', url }); } catch {}
+  }
+}
+
 /* ---------- init ---------- */
 function goTo(id) {
   if (state.view !== 'list') document.querySelector('.tabs button[data-view="list"]').click();
@@ -538,6 +555,7 @@ function bindUI() {
   $('#btnGeo').onclick = geolocate;
   $('#locInput').oninput = (e) => searchCity(e.target.value);
   $('#btnRefresh').onclick = () => refresh(true);
+  $('#btnShare').onclick = shareApp;
 
   document.querySelectorAll('.tabs button').forEach((b) => {
     b.onclick = () => {
