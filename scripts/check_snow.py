@@ -8,7 +8,7 @@ Variables d'environnement :
   NTFY_TOPIC  sujet ntfy secret (obligatoire pour envoyer)
   NTFY_SERVER serveur ntfy (défaut https://ntfy.sh)
 """
-import json, math, os, sys, urllib.parse, urllib.request, datetime, pathlib
+import json, math, os, sys, time, urllib.parse, urllib.request, datetime, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 STATE = ROOT / ".alert-state.json"
@@ -31,6 +31,20 @@ def haversine(a, b):
     return 2 * 6371 * math.asin(math.sqrt(x))
 
 
+def open_url(req, timeout=60, tries=4):
+    """Requête HTTP avec nouvelles tentatives (coupures réseau passagères)."""
+    for n in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except Exception as e:  # noqa: BLE001
+            if n == tries - 1:
+                raise
+            wait = 5 * (n + 1)
+            print(f"  réseau : {e} — nouvel essai dans {wait} s", file=sys.stderr)
+            time.sleep(wait)
+
+
 def forecast(spots, params):
     """Prévisions Open-Meteo pour une liste de spots (par paquets de 40)."""
     out = []
@@ -42,8 +56,7 @@ def forecast(spots, params):
             "elevation": ",".join(str(s.get("alt", 0)) for s in chunk),
             "timezone": "Europe/Paris", **params,
         })
-        with urllib.request.urlopen(f"https://api.open-meteo.com/v1/forecast?{q}", timeout=60) as r:
-            data = json.load(r)
+        data = json.loads(open_url(f"https://api.open-meteo.com/v1/forecast?{q}"))
         out += data if isinstance(data, list) else [data]
     return out
 
@@ -56,7 +69,7 @@ def send(title, body, tags):
     server = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
     req = urllib.request.Request(f"{server}/{topic}", data=body.encode(), method="POST",
                                  headers={"Title": title, "Tags": tags, "Priority": "high"})
-    urllib.request.urlopen(req, timeout=30)
+    open_url(req, timeout=30)
     return True
 
 
@@ -168,12 +181,19 @@ def main():
         if f.exists():
             spots += json.loads(f.read_text())
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
-    snow_alerts(cfg, spots, state)
-    session_alerts(cfg, spots, state)
+    failed = False
+    for step in (snow_alerts, session_alerts):  # une étape en échec n'empêche pas l'autre
+        try:
+            step(cfg, spots, state)
+        except Exception as e:  # noqa: BLE001
+            failed = True
+            print(f"Échec de {step.__name__} : {e}", file=sys.stderr)
     # on oublie les clés de plus de 20 jours
     limit = (datetime.date.today() - datetime.timedelta(days=20)).isoformat()
     state = {k: v for k, v in state.items() if v >= limit}
     STATE.write_text(json.dumps(state))
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
