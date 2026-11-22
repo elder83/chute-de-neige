@@ -17,6 +17,7 @@ Petite appli web (installable sur téléphone) pour suivre les **spots de snowki
 - 📷 liens **webcams**, site de la station, Windy, itinéraire Google Maps, bulletin avalanche
 - 🔎 **recherche** de spot ou de station dans toute la France
 - ❓ aide « Qu'est-ce qu'une session ? » avec tes critères
+- ⇅ **Trier & filtrer** : jusqu'à 3 tris enchaînés (ex. prochaine session puis distance) et filtres (distance, session dans N jours, neige fraîche, chute à venir, neige au sol, altitude, vent bon maintenant)
 - 📅 bouton **Sessions possibles** : n'affiche que les spots où une session kite (neige au sol + vent dans ta plage) ou poudreuse (≥ 10 cm frais puis accalmie) est prévue dans les 2 semaines
 - 🗺️ vue **carte** : spots kite (losanges) et/ou stations (ronds), choix du jour (ou 14 j), couleurs selon **tes conditions** (session kite, poudreuse, vent trop faible/fort, pas assez de neige…), bouton « Bonnes conditions » et légende
 - ⚙️ réglages de session kite : vent mini/maxi, rafales maxi, neige au sol mini

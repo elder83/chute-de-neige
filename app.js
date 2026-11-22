@@ -23,6 +23,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
+const FILTER_DEFAULT = { sessionDays: 0, freshMin: 0, snow3Min: 0, depthMin: 0, altMin: 0, windNow: false };
 const state = {
   spots: [],
   weather: {},
@@ -30,7 +31,9 @@ const state = {
   radius: store.get('radius', 400),
   type: store.get('type', 'all'),
   sort: store.get('sort', 'dist'),
-  sessionsOnly: store.get('sessionsOnly', false),
+  // tris enchaînés (jusqu'à 3) et filtres
+  sorts: store.get('sorts', [store.get('sort', 'dist')]),
+  filters: { sessionDays: store.get('sessionsOnly', false) ? 14 : 0, freshMin: 0, snow3Min: 0, depthMin: 0, altMin: 0, windNow: false, ...store.get('filters', {}) },
   favs: new Set(store.get('favs', [])),
   bells: store.get('bells', {}),
   threshold: store.get('threshold', 20),
@@ -52,6 +55,8 @@ const state = {
   view: 'list',
   map: null, markers: null,
 };
+
+Object.defineProperty(state, 'sessionsOnly', { get: () => state.filters.sessionDays > 0 });
 
 /* ---------- utilitaires ---------- */
 function haversine(a, b) {
@@ -310,38 +315,115 @@ function spotsInRadius() {
       || (state.type === 'ski' && isSki(s))
       || (state.type === 'fav' && state.favs.has(s.id)));
 }
-function visibleSpots() {
-  const list = spotsInRadius();
-  return state.sessionsOnly ? list.filter((s) => relevantSessions(s).length) : list;
+const snowFilterOn = () => state.filters.freshMin || state.filters.snow3Min || state.filters.depthMin;
+function activeFilters() {
+  const f = state.filters;
+  return ['sessionDays', 'freshMin', 'snow3Min', 'depthMin', 'altMin', 'windNow'].filter((k) => f[k]).length;
 }
+function applyFilters(list, { forMap = false } = {}) {
+  const f = state.filters;
+  return list.filter((s) => {
+    if (f.altMin && (s.alt || 0) < f.altMin) return false;
+    if (snowFilterOn() && isWind(s)) return false; // filtres neige : pas les spots mer / lac
+    const w = wx(s);
+    if (snowFilterOn() || f.windNow || (f.sessionDays && !forMap)) { if (!w) return false; }
+    if (f.freshMin && snowPack(w).fresh < f.freshMin) return false;
+    if (f.depthMin && snowPack(w).total < f.depthMin) return false;
+    if (f.snow3Min && summarize(w).next72 < f.snow3Min) return false;
+    if (f.windNow && (!windy(s) || kiteRating(w.current.wind_speed_10m, w.current.wind_gusts_10m, rangeFor(s))?.cls !== 'good')) return false;
+    // la carte gère « session » jour par jour ; la liste : au moins une session dans les N jours
+    if (f.sessionDays && !forMap && !relevantSessions(s).some((x) => x.i - T0 < f.sessionDays)) return false;
+    return true;
+  });
+}
+function visibleSpots() { return applyFilters(spotsInRadius()); }
 /* Tris : chaque tri a une clé (plus petit = en premier) et une valeur affichée sur la fiche */
 const sessDays = (s) => new Set(relevantSessions(s).map((x) => x.i)).size;
+/* Chaque tri : clé « plus petit = en premier » (arrondie pour que les égalités passent au tri suivant),
+   valeur affichée sur la fiche, besoin de la météo, réservé à la neige. */
 const SORTS = {
-  dist:      { key: (s) => s.dist, badge: null },
-  snow:      { snowOnly: true, key: (s, w) => -summarize(w).next72, badge: (s, w) => `+${round(summarize(w).next72)} cm`, need: true },
-  fresh:     { snowOnly: true, key: (s, w) => -snowPack(w).fresh, badge: (s, w) => `${round(snowPack(w).fresh)} cm frais`, need: true },
-  depth:     { snowOnly: true, key: (s, w) => -snowPack(w).total, badge: (s, w) => `${round(snowPack(w).total)} cm au sol`, need: true },
-  session:   { key: (s) => { const x = relevantSessions(s)[0]; return x ? x.i * 10000 + s.dist : 1e9 + s.dist; },
-               badge: (s, w) => { const x = relevantSessions(s)[0]; return x ? dayLong(w, x.i) : null; }, need: true },
-  sessdays:  { key: (s) => -sessDays(s) * 10000 + s.dist, badge: (s) => (sessDays(s) ? `${sessDays(s)} j de session` : null), need: true },
-  wind:      { key: (s, w) => { // vent actuel le plus proche du milieu de ta plage (spots de vent d'abord)
-                 const r = rangeFor(s), v = w.current.wind_speed_10m;
-                 return (windy(s) ? 0 : 1000) + Math.abs(v - (r.windMin + r.windMax) / 2); },
-               badge: (s, w) => `${wv(w.current.wind_speed_10m)} ${U()}`, need: true },
-  alt:       { key: (s) => -(s.alt || 0), badge: (s) => `${s.alt} m` },
-  name:      { key: null, badge: null },
+  dist:     { label: 'Distance', key: (s) => Math.round(s.dist) },
+  session:  { label: 'Prochaine session', need: true, key: (s) => relevantSessions(s)[0]?.i ?? 99,
+              badge: (s, w) => { const x = relevantSessions(s)[0]; return x ? dayLong(w, x.i) : null; } },
+  sessdays: { label: 'Jours de session (14 j)', need: true, key: (s) => -sessDays(s), badge: (s) => (sessDays(s) ? `${sessDays(s)} j de session` : null) },
+  snow:     { label: 'Chute à venir (3 j)', need: true, snowOnly: true, key: (s, w) => -Math.round(summarize(w).next72), badge: (s, w) => `+${round(summarize(w).next72)} cm` },
+  fresh:    { label: 'Neige fraîche (72 h)', need: true, snowOnly: true, key: (s, w) => -Math.round(snowPack(w).fresh), badge: (s, w) => `${round(snowPack(w).fresh)} cm frais` },
+  depth:    { label: 'Neige au sol', need: true, snowOnly: true, key: (s, w) => -Math.round(snowPack(w).total), badge: (s, w) => `${round(snowPack(w).total)} cm au sol` },
+  wind:     { label: 'Vent idéal maintenant', need: true, key: (s, w) => { const r = rangeFor(s); return (windy(s) ? 0 : 1000) + Math.round(Math.abs(w.current.wind_speed_10m - (r.windMin + r.windMax) / 2) / KN); },
+              badge: (s, w) => `${wv(w.current.wind_speed_10m)} ${U()}` },
+  alt:      { label: 'Altitude', key: (s) => -(s.alt || 0), badge: (s) => `${s.alt} m` },
+  name:     { label: 'Nom (A→Z)', cmp: (a, b) => a.name.localeCompare(b.name, 'fr') },
 };
+const sortList = () => state.sorts.filter((k) => SORTS[k]).slice(0, 3);
 function sortSpots(list) {
-  const S = SORTS[state.sort] || SORTS.dist;
-  if (!S.key) return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-  // sans météo : en dernier ; à égalité, le plus proche d'abord
-  const k = (s) => { const w = wx(s); return ((S.need && !w) || (S.snowOnly && isWind(s)) ? 1e12 : S.key(s, w)) + s.dist * 1e-6; };
-  return list.sort((a, b) => k(a) - k(b));
+  const keys = sortList().length ? sortList() : ['dist'];
+  const val = new Map();
+  const v = (s, k) => {
+    const id = s.id + k; if (val.has(id)) return val.get(id);
+    const S = SORTS[k], w = wx(s);
+    const x = (S.need && !w) || (S.snowOnly && isWind(s)) ? 1e12 : S.key(s, w); // sans donnée : en dernier
+    val.set(id, x); return x;
+  };
+  return list.sort((a, b) => {
+    for (const k of keys) {
+      const S = SORTS[k];
+      const d = S.cmp ? S.cmp(a, b) : v(a, k) - v(b, k);
+      if (d) return d;
+    }
+    return a.dist - b.dist; // à égalité : le plus proche
+  });
 }
 function sortBadge(s) {
-  const S = SORTS[state.sort]; const w = wx(s);
-  if (!S?.badge || (S.need && !w) || (S.snowOnly && isWind(s))) return '';
-  const t = S.badge(s, w); return t ? `<span class="sort-badge">${esc(t)}</span>` : '';
+  const w = wx(s);
+  return sortList().map((k) => SORTS[k]).filter((S) => S.badge && !(S.need && !w) && !(S.snowOnly && isWind(s)))
+    .slice(0, 2).map((S) => S.badge(s, w)).filter(Boolean).map((t) => `<span class="sort-badge">${esc(t)}</span>`).join('');
+}
+
+/* ---------- fenêtre « Trier & filtrer » ---------- */
+const FILTER_UI = [
+  ['sessionDays', 'Session possible dans les', 0, 14, 1, (v) => (v ? `${v} jour${v > 1 ? 's' : ''}` : 'peu importe')],
+  ['freshMin', 'Neige fraîche (72 h) au moins', 0, 50, 5, (v) => (v ? `${v} cm` : 'peu importe')],
+  ['snow3Min', 'Chute à venir (3 j) au moins', 0, 80, 5, (v) => (v ? `${v} cm` : 'peu importe')],
+  ['depthMin', 'Neige au sol au moins', 0, 200, 10, (v) => (v ? `${v} cm` : 'peu importe')],
+  ['altMin', 'Altitude au moins', 0, 2500, 100, (v) => (v ? `${v} m` : 'peu importe')],
+];
+function filterSummary() { // ex. « altitude ≥ 1500 m · neige fraîche ≥ 10 cm »
+  const f = state.filters, out = [];
+  if (f.sessionDays && f.sessionDays !== 14) out.push(`session ≤ ${f.sessionDays} j`);
+  if (f.freshMin) out.push(`neige fraîche ≥ ${f.freshMin} cm`);
+  if (f.snow3Min) out.push(`chute à venir ≥ ${f.snow3Min} cm`);
+  if (f.depthMin) out.push(`neige au sol ≥ ${f.depthMin} cm`);
+  if (f.altMin) out.push(`altitude ≥ ${f.altMin} m`);
+  if (f.windNow) out.push('vent bon maintenant');
+  return out.join(' · ');
+}
+function syncSortButton() {
+  const n = activeFilters(), keys = sortList();
+  $('#sortLbl').textContent = keys.length ? keys.map((k) => SORTS[k].label.split(' (')[0]).join(' · ') : 'Distance';
+  $('#sortCount').textContent = n; $('#sortCount').hidden = !n;
+  $('#btnSessions').setAttribute('aria-pressed', state.sessionsOnly);
+}
+function renderSortDlg() {
+  const keys = sortList();
+  const order = [...keys, ...Object.keys(SORTS).filter((k) => !keys.includes(k))]; // choisis d'abord, dans l'ordre
+  $('#sortChips').innerHTML = order.map((k) => [k, SORTS[k]]).map(([k, S]) => {
+    const n = keys.indexOf(k) + 1;
+    return `<button data-sort="${k}" aria-pressed="${!!n}">${n ? `<i class="num">${n}</i>` : ''}${S.label}</button>`;
+  }).join('');
+  $('#filterRows').innerHTML = `<label class="range"><span>Distance max <b>${state.radius} km</b></span>
+      <input type="range" data-f="radius" min="50" max="1200" step="25" value="${state.radius}"></label>`
+    + FILTER_UI.map(([k, label, min, max, step, fmt]) => `<label class="range${state.filters[k] ? ' on' : ''}"><span>${label} <b>${fmt(state.filters[k])}</b></span>
+      <input type="range" data-f="${k}" min="${min}" max="${max}" step="${step}" value="${state.filters[k]}"></label>`).join('')
+    + `<label class="switch"><span>Vent dans ma plage maintenant</span><input type="checkbox" data-f="windNow" ${state.filters.windNow ? 'checked' : ''}></label>`;
+  $('#sortApply').textContent = `Voir ${visibleSpots().length} spot${visibleSpots().length > 1 ? 's' : ''}`;
+}
+function openSortDlg() {
+  renderSortDlg();
+  const d = $('#sortDlg'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+}
+function saveSortFilter() {
+  store.set('sorts', state.sorts); store.set('filters', state.filters);
+  syncSortButton(); render();
 }
 
 /* ---------- alertes ---------- */
@@ -581,8 +663,9 @@ function render() {
   if (state.type === 'mine' && !state.mySpots.length) msg = 'Aucun spot perso : ajoute-en dans ⚙ Paramètres → Mes spots.';
   else if (state.type === 'fav' && !state.favs.size) msg = 'Aucun favori : touche ☆ sur une fiche pour suivre un spot.';
   else if (state.q.trim()) msg = n ? `${n} résultat${pl} pour « ${state.q.trim()} » (toute la France)` : `Aucun spot ni station pour « ${state.q.trim()} »`;
-  else if (!n) msg = state.sessionsOnly ? `Aucune session possible sur 14 jours · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
-  else msg = state.sessionsOnly ? `${n} spot${pl} avec au moins une session possible sur 14 jours · ${where}` : `${n} spot${pl} · ${where}`;
+  else if (!n) msg = activeFilters() ? `Aucun spot ne correspond aux filtres · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
+  else msg = state.sessionsOnly ? `${n} spot${pl} avec une session possible · ${where}` : `${n} spot${pl} · ${where}`;
+  if (filterSummary() && !state.q.trim()) msg += ` · ${filterSummary()}`;
   $('#status').innerHTML = `${esc(msg)}${state.updated ? ` · <button class="link-inline" id="statusRefresh" title="Actualiser la météo">màj ${state.updated}</button>` : ''}`;
   $('#statusRefresh')?.addEventListener('click', () => refresh(true));
   if (state.view === 'map') renderMap();
@@ -632,7 +715,7 @@ function mapStatus(s, w, day) {
   if (sf >= 3) return { st: 'snowing', n: `+${round(sf)}` };
   return { st: 'none' };
 }
-function mapSpots() { return spotsInRadius(); } // mêmes filtres que la liste
+function mapSpots() { return applyFilters(spotsInRadius(), { forMap: true }); } // mêmes filtres que la liste
 function renderMapDays() {
   const w = Object.values(state.weather)[0];
   const el = $('#mapDays');
@@ -1339,17 +1422,43 @@ function bindUI() {
       render(); window.scrollTo({ top: 0 });
     };
   });
-  const ses = $('#btnSessions');
-  ses.setAttribute('aria-pressed', state.sessionsOnly);
-  ses.onclick = () => {
-    state.sessionsOnly = !state.sessionsOnly; store.set('sessionsOnly', state.sessionsOnly);
-    ses.setAttribute('aria-pressed', state.sessionsOnly);
-    if (state.sessionsOnly && state.sort === 'dist') { state.sort = 'session'; $('#sort').value = 'session'; store.set('sort', 'session'); }
-    if (!state.sessionsOnly && state.sort === 'session') { state.sort = 'dist'; $('#sort').value = 'dist'; store.set('sort', 'dist'); }
-    render();
+  // raccourci « Sessions possibles » = filtre session dans les 14 jours (+ tri par prochaine session)
+  $('#btnSessions').onclick = () => {
+    const on = !state.sessionsOnly;
+    state.filters.sessionDays = on ? 14 : 0;
+    if (on && !state.sorts.includes('session')) state.sorts = ['session', ...state.sorts].slice(0, 3);
+    if (!on) state.sorts = state.sorts.filter((k) => k !== 'session');
+    saveSortFilter();
   };
-  const sort = $('#sort'); sort.value = state.sort;
-  sort.onchange = () => { state.sort = sort.value; store.set('sort', state.sort); render(); };
+  $('#btnSort').onclick = openSortDlg;
+  const sdlg = $('#sortDlg');
+  sdlg.addEventListener('click', (e) => {
+    if (e.target === sdlg || e.target.closest('[data-close]') || e.target.id === 'sortApply') { sdlg.close ? sdlg.close() : sdlg.removeAttribute('open'); window.scrollTo({ top: 0 }); return; }
+    const c = e.target.closest('[data-sort]');
+    if (c) { // 1er appui = ajouté à la fin ; nouvel appui = retiré
+      const k = c.dataset.sort;
+      state.sorts = state.sorts.includes(k) ? state.sorts.filter((x) => x !== k) : [...sortList(), k].slice(-3);
+      saveSortFilter(); renderSortDlg(); return;
+    }
+    if (e.target.id === 'sortReset') {
+      state.sorts = ['dist']; state.filters = { ...FILTER_DEFAULT };
+      saveSortFilter(); renderSortDlg();
+    }
+  });
+  sdlg.addEventListener('input', (e) => { // affichage de la valeur pendant le glissement
+    const el = e.target.closest('[data-f]'); if (!el || el.type !== 'range') return;
+    const k = el.dataset.f, row = FILTER_UI.find((r) => r[0] === k);
+    el.closest('label').querySelector('b').textContent = k === 'radius' ? `${el.value} km` : row[5](+el.value);
+  });
+  sdlg.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-f]'); if (!el) return;
+    const k = el.dataset.f;
+    if (k === 'radius') { state.radius = +el.value; store.set('radius', state.radius); $('#radius').value = state.radius; $('#radiusVal').textContent = state.radius; showLoc(); refresh().then(renderSortDlg); return; }
+    state.filters[k] = el.type === 'checkbox' ? el.checked : +el.value;
+    if (k === 'sessionDays' && state.filters.sessionDays && !state.sorts.includes('session')) state.sorts = ['session', ...state.sorts].slice(0, 3);
+    saveSortFilter(); renderSortDlg();
+  });
+  syncSortButton();
 
   const dlg = $('#settingsDlg');
   const openSettings = () => { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); };

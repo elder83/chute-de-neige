@@ -567,3 +567,19 @@ h2[tabindex]:focus { outline: none; }
 .card .title .meta { flex-basis: 100%; }
 .sort-badge { font-size: 12px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 #sort { font-size: 14px; }
+
+/* Trier & filtrer */
+.sort-btn { flex: 1; min-width: 0; justify-content: flex-start; }
+.sort-btn #sortLbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { font-style: normal; font-size: 11px; font-weight: 700; background: var(--accent); color: #fff; border-radius: 999px; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; margin-left: auto; }
+.count[hidden] { display: none; }
+#sortDlg { display: none; flex-direction: column; }
+#sortDlg[open] { display: flex; }
+#sortDlg .sheet-body { flex: 1; max-height: none; }
+.sort-chips { flex-wrap: wrap; }
+.sort-chips button[aria-pressed=true] { background: var(--text); color: var(--card); border-color: var(--text); }
+.sort-chips .num { font-style: normal; font-weight: 700; font-size: 11px; width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--accent); color: #fff; }
+#filterRows .range.on span { color: var(--accent); }
+.sort-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); flex: none; }
+.sort-foot .link { margin: 0; }
+.card .title .sort-badge + .sort-badge { margin-left: -2px; }
