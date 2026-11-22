@@ -46,6 +46,7 @@ const state = {
   unit: store.get('unit', 'kn'),          // unité du vent : 'kn' (nœuds) ou 'kmh'
   mapDay: 'all',
   bannerOpen: store.get('bannerOpen', null),   // bandeau d'alertes déplié ?
+  q: '',                                       // recherche de spot / station
   ntfyTopic: store.get('ntfyTopic', ''),
   view: 'list',
   map: null, markers: null,
@@ -223,7 +224,16 @@ function allInRadius() {
     .filter((s) => s.dist <= state.radius || s.custom) // mes spots : toujours visibles
     .filter((s) => !isWind(s) || enabledSports(s).length); // disciplines affichées
 }
+const norm = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function searchResults() { // recherche dans toute la France, sans limite de rayon
+  const words = norm(state.q).split(/\s+/).filter(Boolean);
+  return allSpots()
+    .filter((s) => !isWind(s) || enabledSports(s).length)
+    .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
+    .filter((s) => { const t = norm(`${s.name} ${s.massif || ''}`); return words.every((w) => t.includes(w)); });
+}
 function spotsInRadius() {
+  if (state.q.trim()) return searchResults();
   return allInRadius()
     .filter((s) => state.type === 'all'
       || (state.type === 'kite' && isKite(s))
@@ -416,7 +426,7 @@ function renderCard(s, alerting) {
   const sess = sessionsFor(s, w);
   const shown = relevantSessions(s);
   const groups = groupByDay(shown);
-  node.querySelector('.sessions').innerHTML = groups.slice(0, 4).map((g) =>
+  node.querySelector('.sessions').innerHTML = (groups.length ? '<span class="sess-title">Sessions possibles</span>' : '') + groups.slice(0, 4).map((g) =>
     `<span class="sess${g[0].far ? ' far' : ''}" title="${g[0].far ? 'Prévision lointaine, indicative' : ''}">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(w, g[0].i)} · ${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span>`
   ).join('') + (groups.length > 4 ? `<span class="sess muted">+${groups.length - 4} j</span>` : '');
 
@@ -438,7 +448,7 @@ function renderCard(s, alerting) {
     </div>`;
   }
   node.querySelector('.days').innerHTML = html;
-  node.querySelector('.days').insertAdjacentHTML('afterend', `<p class="days-legend muted">Vent max et rafales en ${U()} · touche la fiche pour le détail heure par heure</p>`);
+  node.querySelector('.days').insertAdjacentHTML('afterend', `<p class="days-legend muted">${sess.length ? '<i class="lg-day"></i> jour coloré = session possible · ' : ''}vent max / rafales en ${U()} · touche pour le détail</p>`);
   node.addEventListener('click', (e) => {
     if (e.target.closest('a, button')) return;
     const day = e.target.closest('[data-day]');
@@ -459,8 +469,9 @@ function render() {
   let msg;
   if (state.type === 'mine' && !state.mySpots.length) msg = 'Aucun spot perso : ajoute-en dans ⚙ Paramètres → Mes spots.';
   else if (state.type === 'fav' && !state.favs.size) msg = 'Aucun favori : touche ☆ sur une fiche pour suivre un spot.';
-  else if (!n) msg = state.sessionsOnly ? `Aucune bonne condition prévue sur 14 jours · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
-  else msg = state.sessionsOnly ? `${n} spot${pl} avec de bonnes conditions sur 14 jours · ${where}` : `${n} spot${pl} · ${where}`;
+  else if (state.q.trim()) msg = n ? `${n} résultat${pl} pour « ${state.q.trim()} » (toute la France)` : `Aucun spot ni station pour « ${state.q.trim()} »`;
+  else if (!n) msg = state.sessionsOnly ? `Aucune session possible sur 14 jours · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
+  else msg = state.sessionsOnly ? `${n} spot${pl} avec au moins une session possible sur 14 jours · ${where}` : `${n} spot${pl} · ${where}`;
   $('#status').textContent = msg;
   if (state.view === 'map') renderMap();
   return { list, alerts, sessAlerts };
@@ -471,8 +482,8 @@ function cssVar(name) { return getComputedStyle(document.documentElement).getPro
 /* Statut d'un spot sur la carte selon MES conditions.
    day = 'all' (sur 14 jours) ou index du jour (0 = aujourd'hui). */
 const MAP_STATUS = {
-  good:    { label: 'Session (vent dans ta plage)', good: true },
-  powder:  { label: 'Poudreuse', good: true },
+  good:    { label: 'Session possible (kite, wing, planche)', good: true },
+  powder:  { label: 'Session possible (ski poudreuse)', good: true },
   snowing: { label: 'Neige qui tombe / à venir' },
   weak:    { label: 'Neige ok, vent trop faible' },
   strong:  { label: 'Vent trop fort / rafales' },
@@ -546,7 +557,7 @@ function renderMap() {
   for (const s of mapSpots()) {
     const w = state.weather[s.id];
     const { st, n } = mapStatus(s, w, state.mapDay);
-    if (state.sessionsOnly && !MAP_STATUS[st].good) continue; // « Bonnes conditions »
+    if (state.sessionsOnly && !MAP_STATUS[st].good) continue; // « Sessions possibles »
     const kite = isKite(s), shape = isWind(s) ? 'wind' : kite ? 'kite' : 'ski';
     if (!seen.has(st)) seen.set(st, new Set());
     seen.get(st).add(shape);
@@ -998,6 +1009,37 @@ function renderDetail() {
   $('#dBody').scrollTop = 0;
 }
 
+/* ---------- aide : qu'est-ce qu'une session ? ---------- */
+function renderHelp() {
+  const r = (sp) => (sp === 'kite' ? state.kite : state.ranges[sp]);
+  const line = (sp, extra = '') => `<li class="t-${sp}">${icon(SPORTS[sp].icon)}<span><b>${SESS_TYPE[sp]}</b> : vent entre <b>${wv(r(sp).windMin)} et ${wv(r(sp).windMax)} ${U()}</b>, rafales ≤ ${wv(r(sp).gustMax)} ${U()}${extra}</span></li>`;
+  $('#helpBody').innerHTML = `
+    <p>Une <b>session possible</b>, c'est un jour où la météo prévue correspond à <b>tes critères</b> pour ta discipline. Ce n'est pas une garantie : vérifie toujours sur place (vent réel, neige, BRA).</p>
+    <h3>Tes critères actuels</h3>
+    <ul class="help-list">
+      ${line('kite', `, et au moins <b>${state.kite.minSnow} cm de neige au sol</b> (fraîche ou non)`)}
+      <li class="t-ski">${icon('i-ski')}<span><b>Ski poudreuse</b> : au moins <b>10 cm tombés</b> les 2 jours d'avant, puis une journée calme (pas de grosse chute, ni pluie, vent &lt; 45 km/h)</span></li>
+      ${['kitesea', 'wing', 'windsurf'].filter((x) => state.disc[x]).map((x) => line(x)).join('')}
+    </ul>
+    <p class="muted small">Tu changes ces critères dans ⚙ → Mes plages de vent.</p>
+    <h3>Où les voir</h3>
+    <ul class="help-list plain">
+      <li><b>Sur une fiche</b> : « Sessions possibles » liste les jours, et ces jours sont colorés dans la bande des 14 jours.</li>
+      <li><b>Bouton « Sessions possibles »</b> : ne garde que les spots qui en ont au moins une (14 jours dans la liste, jour choisi sur la carte).</li>
+      <li><b>Sur la carte</b> : marqueur plein vert = session de vent, bleu = poudreuse.</li>
+      <li><b>Bandeau en haut</b> : sessions possibles sur les spots que tu suis.</li>
+    </ul>
+    <h3>Suivre et alertes</h3>
+    <ul class="help-list plain">
+      <li><b>☆ Suivre</b> un spot : il passe en favori et tu es prévenu quand une session est possible (${state.sessionHorizon} prochains jours).</li>
+      <li><b>🔔</b> (montagne) : alerte quand il va tomber beaucoup de neige (seuil en cm sur 3 jours).</li>
+    </ul>`;
+}
+function openHelp() {
+  renderHelp();
+  const d = $('#helpDlg'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+}
+
 /* ---------- partage ---------- */
 let toastTimer;
 function toast(msg) {
@@ -1148,6 +1190,26 @@ function bindUI() {
   $('#locInput').oninput = (e) => searchCity(e.target.value);
   $('#btnRefresh').onclick = () => refresh(true);
   $('#btnShare').onclick = shareApp;
+  $('#btnHelp').onclick = openHelp;
+  $('#helpDlg').addEventListener('click', (e) => {
+    if (e.target === $('#helpDlg') || e.target.closest('[data-close]')) { const d = $('#helpDlg'); d.close ? d.close() : d.removeAttribute('open'); }
+  });
+  // recherche
+  const sq = $('#searchInput');
+  let sqTimer;
+  sq.oninput = () => {
+    clearTimeout(sqTimer);
+    $('#searchClear').hidden = !sq.value;
+    sqTimer = setTimeout(async () => {
+      state.q = sq.value;
+      render();
+      if (state.q.trim()) { // météo des résultats hors rayon
+        const missing = searchResults().filter((x) => !state.weather[x.id]).slice(0, 80);
+        if (missing.length) { try { await fetchWeather(missing); render(); } catch {} }
+      }
+    }, 250);
+  };
+  $('#searchClear').onclick = () => { sq.value = ''; $('#searchClear').hidden = true; state.q = ''; render(); sq.focus(); };
   const ddlg = $('#detailDlg');
   ddlg.addEventListener('click', (e) => {
     if (e.target === ddlg || e.target.closest('[data-close]')) { ddlg.close ? ddlg.close() : ddlg.removeAttribute('open'); }
@@ -1174,7 +1236,7 @@ function bindUI() {
   $('#map').addEventListener('click', (e) => { // depuis la carte : ouvrir directement le détail
     const a = e.target.closest('[data-goto]'); if (!a) return;
     e.preventDefault();
-    const sp = allInRadius().find((x) => x.id === a.dataset.goto);
+    const sp = spotsInRadius().find((x) => x.id === a.dataset.goto) || allInRadius().find((x) => x.id === a.dataset.goto);
     if (sp) openDetail(sp, +(a.dataset.day || 0));
   });
 }

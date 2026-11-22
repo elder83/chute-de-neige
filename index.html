@@ -45,6 +45,8 @@
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></symbol>
       <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
       <!-- météo -->
@@ -71,6 +73,11 @@
     <button id="placePill" class="pill" title="Changer la position ou le rayon">
       <svg class="i"><use href="#i-pin"/></svg><span id="placeTxt"></span>
     </button>
+    <div class="search">
+      <svg class="i"><use href="#i-search"/></svg>
+      <input id="searchInput" type="search" placeholder="Rechercher un spot ou une station" autocomplete="off" enterkeyhint="search" aria-label="Rechercher un spot ou une station">
+      <button id="searchClear" class="icon-btn" hidden aria-label="Effacer la recherche"><svg class="i"><use href="#i-close"/></svg></button>
+    </div>
     <div class="chips" id="typeFilter">
       <button data-type="all">Tout</button>
       <button data-type="kite"><svg class="i"><use href="#i-snowkite"/></svg>Snowkite</button>
@@ -80,9 +87,10 @@
       <button data-type="mine"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
     </div>
     <div class="row">
-      <button id="btnSessions" class="toggle" aria-pressed="false" title="N'afficher que les spots où tes conditions sont réunies (liste : 14 jours, carte : jour choisi)">
-        <svg class="i"><use href="#i-check"/></svg>Bonnes conditions
+      <button id="btnSessions" class="toggle" aria-pressed="false" title="N'afficher que les spots avec une session possible (liste : 14 jours, carte : jour choisi)">
+        <svg class="i"><use href="#i-check"/></svg>Sessions possibles
       </button>
+      <button id="btnHelp" class="icon-btn help-btn" title="Qu'est-ce qu'une session ?" aria-label="Qu'est-ce qu'une session ?"><svg class="i"><use href="#i-help"/></svg></button>
       <select id="sort" aria-label="Trier par">
         <option value="dist">Distance</option>
         <option value="snow">Neige</option>
@@ -267,6 +275,14 @@
     </div>
     <div id="pickMap"></div>
     <div class="map-dlg-foot"><button id="mapDlgOk" class="btn" hidden>Valider l'emplacement</button></div>
+  </dialog>
+
+  <dialog id="helpDlg" class="sheet" aria-labelledby="helpTitle">
+    <div class="sheet-head">
+      <h2 id="helpTitle" tabindex="-1" autofocus>Qu'est-ce qu'une session ?</h2>
+      <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
+    </div>
+    <div id="helpBody" class="sheet-body help-body"></div>
   </dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>
