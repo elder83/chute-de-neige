@@ -1,5 +1,5 @@
 // Service worker : appli utilisable hors ligne (dernières données en cache)
-const CACHE = 'chute-de-neige-v20';
+const CACHE = 'chute-de-neige-v21';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'spots.json', 'spots-osm.json', 'spots-eau.json', 'manifest.webmanifest', 'icons/icon-192.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css'];
 

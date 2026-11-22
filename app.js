@@ -231,7 +231,7 @@ function allSpots() { return [...state.mySpots, ...state.spots]; }
 function allInRadius() {
   return allSpots()
     .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
-    .filter((s) => s.dist <= state.radius || s.custom) // mes spots : toujours visibles
+    .filter((s) => s.dist <= state.radius || s.custom || state.favs.has(s.id)) // mes spots et favoris : toujours visibles
     .filter((s) => !isWind(s) || enabledSports(s).length); // disciplines affichées
 }
 const norm = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -410,7 +410,7 @@ function renderCard(s, alerting) {
   h.innerHTML = typeIcons(s);
   h.append(s.name);
   node.querySelector('.meta').textContent = s.custom
-    ? `Mon spot · ${sportsLabel(s) || SPORTS[sportOf(s)].label} · ${round(s.dist)} km`
+    ? `Mon spot · ${s.type === 'ski' ? s.massif : sportsLabel(s) || SPORTS[sportOf(s)].label} · ${round(s.dist)} km`
     : isWind(s) ? `${s.massif} · ${sportsLabel(s)} · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
   node.classList.toggle('mine', !!s.custom);
@@ -418,10 +418,7 @@ function renderCard(s, alerting) {
   const fav = node.querySelector('.fav');
   fav.classList.toggle('on', state.favs.has(s.id));
   fav.title = state.favs.has(s.id) ? 'Suivi : favori + alerte session — retirer' : 'Suivre ce spot (favori + alerte session)';
-  fav.onclick = () => {
-    state.favs.has(s.id) ? state.favs.delete(s.id) : state.favs.add(s.id);
-    store.set('favs', [...state.favs]); render();
-  };
+  fav.onclick = () => toggleFav(s);
   const bell = node.querySelector('.bell');
   bell.hidden = isWind(s); // pas de neige sur les spots mer / lac
   const thr = state.bells[s.id];
@@ -860,14 +857,40 @@ async function fetchHourly(s) {
   hourlyCache[s.id] = { t: Date.now(), h };
   return h;
 }
+/* Favori : un spot du catalogue passe en ★ ; un lieu hors base est d'abord ajouté à « Mes spots » */
+function isFav(s) { return state.favs.has(s.id); }
+function toggleFav(s) {
+  if (String(s.id).startsWith('geo-')) {
+    let m = state.mySpots.find((x) => x.geoId === s.id);
+    if (!m) {
+      m = { id: 'u-' + Date.now().toString(36), geoId: s.id, custom: true, name: s.name, type: 'ski', massif: s.massif || 'Mes spots', lat: s.lat, lon: s.lon, alt: s.alt || 0 };
+      state.mySpots.push(m); saveMySpots(); renderMySpots();
+    }
+    s.id = m.id; s.custom = true;
+  }
+  const on = !state.favs.has(s.id);
+  on ? state.favs.add(s.id) : state.favs.delete(s.id);
+  store.set('favs', [...state.favs]);
+  toast(on ? `★ ${s.name} suivi (favori + alerte session)` : `${s.name} retiré des favoris`);
+  if (on && String(s.id).startsWith('u-') && !state.weather[s.id]) refresh(); else render();
+  return on;
+}
+function syncDetailFav() {
+  const b = $('#dFav'); if (!b || !detail.spot) return;
+  const on = isFav(detail.spot);
+  b.classList.toggle('on', on);
+  b.title = on ? 'Retirer des favoris' : 'Suivre ce spot (favori + alerte session)';
+}
+
 async function openDetail(s, day = 0, tab) {
   detail.spot = s; detail.day = day; detail.data = null; detail.models = null;
   detail.tab = tab || (windy(s) && day < 7 ? 'models' : 'hours');
   const dlg = $('#detailDlg');
   $('#dTitle').innerHTML = typeIcons(s); $('#dTitle').append(s.name);
-  $('#dMeta').textContent = s.custom ? `Mon spot · ${SPORTS[sportOf(s)].label} · ${s.alt} m · ${round(s.dist)} km`
+  $('#dMeta').textContent = s.custom ? `Mon spot · ${s.type === 'ski' ? s.massif : SPORTS[sportOf(s)].label} · ${s.alt} m · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
   $('#dLinks').innerHTML = (s.info ? `<p class="d-info">${esc(s.info)}</p>` : '') + `<div class="links">${linksFor(s)}</div>`;
+  syncDetailFav();
   if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
   showDetailTab();
 }
@@ -1169,6 +1192,7 @@ function bindUI() {
     if (e.target === $('#mapDlg') || e.target.closest('[data-close]')) closeMapDialog();
   });
   $('#dMapBtn').onclick = () => { if (detail.spot) openMapDialog({ spot: detail.spot }); };
+  $('#dFav').onclick = () => { if (!detail.spot) return; toggleFav(detail.spot); syncDetailFav(); };
   document.querySelectorAll('#discSel button').forEach((b) => {
     b.setAttribute('aria-pressed', !!state.disc[b.dataset.disc]);
     b.onclick = () => {
@@ -1244,7 +1268,8 @@ function bindUI() {
     $('#searchClear').hidden = !sq.value;
     if (q.length < 2) { box.hidden = true; if (!q && state.q) { state.q = ''; render(); } return; }
     const res = searchResults(q);
-    const rows = res.slice(0, 8).map((x) => `<li data-id="${esc(x.id)}">${typeIcons(x)}<span class="sg-txt"><b>${esc(x.name)}</b><small>${esc(x.massif || '')} · ${round(x.dist)} km</small></span></li>`);
+    const star = (x) => `<button class="sg-fav icon-btn${isFav(x) ? ' on' : ''}" data-fav="${esc(x.id)}" aria-label="Favori">${icon('i-star')}</button>`;
+    const rows = res.slice(0, 8).map((x) => `<li data-id="${esc(x.id)}">${typeIcons(x)}<span class="sg-txt"><b>${esc(x.name)}</b><small>${esc(x.massif || '')} · ${round(x.dist)} km</small></span>${star(x)}</li>`);
     if (res.length > 8) rows.push(`<li class="sg-all" data-all="1">Voir les ${res.length} résultats dans la liste</li>`);
     box.innerHTML = rows.join('') + '<li class="sg-geo muted" hidden></li>';
     box.hidden = false;
@@ -1276,6 +1301,12 @@ function bindUI() {
   };
   box.addEventListener('mousedown', (e) => e.preventDefault()); // garder le focus pendant le choix
   box.addEventListener('click', async (e) => {
+    const fb = e.target.closest('[data-fav]');
+    if (fb) { // étoile : favori sans fermer la liste
+      const x = searchResults(sq.value).find((y) => y.id === fb.dataset.fav);
+      if (x) fb.classList.toggle('on', toggleFav(x));
+      return;
+    }
     const li = e.target.closest('li'); if (!li) return;
     if (li.dataset.all) { applySearch(sq.value); closeSuggest(); sq.blur(); return; }
     closeSuggest(); sq.blur();

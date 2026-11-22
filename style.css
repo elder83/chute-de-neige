@@ -530,3 +530,9 @@ h2[tabindex]:focus { outline: none; }
 .suggest .sg-txt b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .suggest .sg-txt small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .suggest .sg-all { color: var(--accent); font-weight: 600; justify-content: center; border-top: 1px solid var(--border); }
+
+/* étoiles favori : suggestions et détail */
+.suggest .sg-txt { flex: 1; }
+.sg-fav { margin-left: auto; padding: 4px; }
+.sg-fav.on, #dFav.on { color: var(--warn); }
+.sg-fav.on .i, #dFav.on .i { fill: currentColor; }
