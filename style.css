@@ -436,3 +436,33 @@ h2[tabindex]:focus { outline: none; }
 #alertsBanner .stype > span[class*="t-"] .i { color: var(--tc); }
 #alertsBanner .stype > span[class*="t-"] b { color: var(--tc); }
 #alertsBanner .stype .sep { color: var(--muted); margin: 0 1px; }
+
+/* ---- Revue ergonomie ---- */
+/* filtres sur une seule ligne qui défile */
+.bar .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 10px -16px 0; padding: 0 16px; }
+.bar .chips::-webkit-scrollbar { display: none; }
+.bar .chips button { flex: none; }
+/* bandeau d'alertes repliable */
+#alertsBanner { display: block; }
+.ab-head {
+  width: 100%; display: flex; align-items: center; gap: 8px; text-align: left;
+  background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--good);
+  border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: 600; margin-bottom: 6px;
+}
+.ab-head span { flex: 1; }
+.ab-head .i { color: var(--good); }
+.ab-head .chev { color: var(--muted); transition: transform .15s; }
+.ab-head[aria-expanded=true] .chev { transform: rotate(180deg); }
+/* lignes de réglage */
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 14px; }
+.set-row.col { flex-direction: column; align-items: flex-start; gap: 6px; }
+.set-row .chips { margin-top: 0; }
+#ntfyTopic { width: 100%; margin: 6px 0 8px; }
+.icon-btn[hidden] { display: none; }
+
+.map-days button[data-d=all] { text-transform: none; }
+.sheet .range span b { white-space: nowrap; }
+.sess > span[class*="t-"] { display: inline-flex; align-items: center; gap: 4px; }
+.sess > span[class*="t-"] .i { color: var(--tc); }
+.sess > span[class*="t-"] b { color: var(--tc); }
+.sess .sep { color: var(--muted); margin: 0 1px; }

@@ -36,9 +36,9 @@ Pour tester en local : `python3 -m http.server` puis ouvrir http://localhost:800
 
 **Même appli fermée (push sur le téléphone, via ntfy)** :
 
-1. Installer l'appli gratuite **ntfy** (Android / iPhone) et s'abonner à un sujet secret, ex. `neige-hyeres-8f3k`.
-2. Sur GitHub : **Settings → Secrets and variables → Actions → New repository secret**, nom `NTFY_TOPIC`, valeur = ton sujet.
-3. Dans l'appli, menu 🔔 Alertes → « Copier ma config d'alertes », et coller le résultat dans `alerts-config.json`.
+1. Installer l'appli gratuite **ntfy** (Android / iPhone) et s'abonner à un sujet, ex. `neige-hyeres-8f3k`.
+2. Dans l'appli Chute de neige : ⚙ → Alertes → « Alertes appli fermée » : saisir le sujet, puis « Copier ma config » et coller le résultat dans `alerts-config.json`.
+   (Le sujet peut aussi être mis en secret GitHub `NTFY_TOPIC` pour ne pas apparaître dans ce fichier public.)
 4. Le workflow `.github/workflows/alertes-neige.yml` vérifie toutes les 3 h et t'envoie une notification (une par spot et par jour maximum). Lancement manuel possible dans l'onglet **Actions**.
 
 ## Liste des stations

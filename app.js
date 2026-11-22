@@ -1,7 +1,7 @@
 /* Chute de Neige — spots snowkite & ski, météo, sessions, webcams, alertes neige */
 'use strict';
 
-const HYERES = { lat: 43.1204, lon: 6.1286, label: 'Hyères (par défaut)' };
+const HYERES = { lat: 43.1204, lon: 6.1286, label: 'Hyères' };
 const CACHE_MIN = 30;           // durée de cache météo (minutes)
 const CHECK_EVERY_MIN = 30;     // vérification des alertes appli ouverte
 const DAYS = 14;                // jours de prévision
@@ -26,7 +26,7 @@ const store = {
 const state = {
   spots: [],
   weather: {},
-  loc: store.get('loc', HYERES),
+  loc: (() => { const l = store.get('loc', HYERES); l.label = String(l.label).replace(' (par défaut)', ''); return l; })(),
   radius: store.get('radius', 400),
   type: store.get('type', 'all'),
   sort: store.get('sort', 'dist'),
@@ -44,12 +44,9 @@ const state = {
   sessionAlert: store.get('sessionAlert', true),
   sessionHorizon: store.get('sessionHorizon', 3),
   unit: store.get('unit', 'kn'),          // unité du vent : 'kn' (nœuds) ou 'kmh'
-  mapKite: store.get('mapKite', true),
-  mapSki: store.get('mapSki', true),
-  mapMine: store.get('mapMine', true),
-  mapWater: store.get('mapWater', true),
   mapDay: 'all',
-  mapGoodOnly: store.get('mapGoodOnly', false),
+  bannerOpen: store.get('bannerOpen', null),   // bandeau d'alertes déplié ?
+  ntfyTopic: store.get('ntfyTopic', ''),
   view: 'list',
   map: null, markers: null,
 };
@@ -246,7 +243,7 @@ function computeAlerts(list) {
   const out = [];
   for (const s of list) {
     const thr = thresholdFor(s); const w = state.weather[s.id];
-    if (thr == null || !w) continue;
+    if (thr == null || !w || isWind(s)) continue;
     const { next72 } = summarize(w);
     if (next72 >= thr) out.push({ s, next72, thr });
   }
@@ -313,13 +310,24 @@ function groupByDay(ses) { // sessions d'un même jour regroupées (ex. Kite · 
 }
 function renderAlertsBanner(alerts, sessions = []) {
   const el = $('#alertsBanner');
-  el.hidden = !alerts.length && !sessions.length;
-  el.innerHTML = sessions.map((a) =>
+  const total = alerts.length + sessions.length;
+  el.hidden = !total;
+  if (!total) return;
+  const open = state.bannerOpen ?? total <= 2;
+  const parts = [];
+  if (sessions.length) parts.push(`${sessions.length} spot${sessions.length > 1 ? 's' : ''} avec session possible`);
+  if (alerts.length) parts.push(`${alerts.length} alerte${alerts.length > 1 ? 's' : ''} neige`);
+  el.innerHTML = `<button class="ab-head" aria-expanded="${open}">${icon('i-bell')}<span>${parts.join(' · ')}</span><svg class="i chev"><use href="#i-chev"/></svg></button>
+    <div class="ab-body"${open ? '' : ' hidden'}>` + sessions.map((a) =>
     `<div class="alert sess-alert" data-goto="${esc(a.s.id)}"><span class="sa-name"><b>${esc(a.s.name)}</b> <span class="muted">· session possible</span></span>
       <span class="sa-list">${groupByDay(a.ses).map((g) => `<span class="stype">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(a.w, g[0].i)} <span class="muted">${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span></span>`).join('')}</span></div>`
   ).join('') + alerts.map((a) =>
     `<div class="alert" data-goto="${esc(a.s.id)}">${icon('i-snow')}<span><b>${esc(a.s.name)}</b> · ${round(a.next72)} cm sur 3 jours <span class="muted">(seuil ${a.thr} cm)</span></span></div>`
-  ).join('');
+  ).join('') + '</div>';
+  el.querySelector('.ab-head').onclick = () => {
+    state.bannerOpen = !open; store.set('bannerOpen', state.bannerOpen);
+    renderAlertsBanner(alerts, sessions);
+  };
 }
 
 /* ---------- rendu ---------- */
@@ -357,14 +365,16 @@ function renderCard(s, alerting) {
 
   const fav = node.querySelector('.fav');
   fav.classList.toggle('on', state.favs.has(s.id));
+  fav.title = state.favs.has(s.id) ? 'Suivi : favori + alerte session — retirer' : 'Suivre ce spot (favori + alerte session)';
   fav.onclick = () => {
     state.favs.has(s.id) ? state.favs.delete(s.id) : state.favs.add(s.id);
     store.set('favs', [...state.favs]); render();
   };
   const bell = node.querySelector('.bell');
+  bell.hidden = isWind(s); // pas de neige sur les spots mer / lac
   const thr = state.bells[s.id];
   bell.classList.toggle('on', thr != null);
-  bell.title = thr != null ? `Alerte à ${thr} cm — modifier` : 'Créer une alerte neige';
+  bell.title = thr != null ? `Alerte chute de neige à ${thr} cm — modifier` : 'Alerte chute de neige';
   bell.onclick = () => {
     const v = prompt(`Alerte neige pour ${s.name}\nSeuil en cm sur 72 h (vide = supprimer l'alerte) :`, thr ?? state.threshold);
     if (v === null) return;
@@ -389,9 +399,10 @@ function renderCard(s, alerting) {
 
   const sess = sessionsFor(s, w);
   const shown = relevantSessions(s);
-  node.querySelector('.sessions').innerHTML = shown.slice(0, 6).map((x) =>
-    `<span class="sess ${sessCls(x)}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(w, x.i)} · ${x.txt.replace(/^poudreuse /, '')}</span>`
-  ).join('') + (shown.length > 6 ? `<span class="sess muted">+${shown.length - 6}</span>` : '');
+  const groups = groupByDay(shown);
+  node.querySelector('.sessions').innerHTML = groups.slice(0, 4).map((g) =>
+    `<span class="sess${g[0].far ? ' far' : ''}" title="${g[0].far ? 'Prévision lointaine, indicative' : ''}">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(w, g[0].i)} · ${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span>`
+  ).join('') + (groups.length > 4 ? `<span class="sess muted">+${groups.length - 4} j</span>` : '');
 
   const byDay = {};
   sess.forEach((x) => { byDay[x.i] = byDay[x.i] || (x.kind === 'wind' ? 'kite' : x.kind); });
@@ -428,11 +439,13 @@ function render() {
   renderAlertsBanner(alerts, sessAlerts);
   $('#list').replaceChildren(...list.map((s) => renderCard(s, alertIds.has(s.id))));
   const n = list.length, pl = n > 1 ? 's' : '';
-  $('#status').textContent = state.sessionsOnly
-    ? (n ? `${n} spot${pl} avec au moins une session dans les 14 jours · ${state.radius} km autour de ${state.loc.label}`
-         : 'Aucune session prévue dans les 14 jours dans ce rayon.')
-    : (n ? `${n} spot${pl} dans un rayon de ${state.radius} km autour de ${state.loc.label}`
-         : 'Aucun spot dans ce rayon — augmente la distance.');
+  const where = `${state.radius} km autour de ${state.loc.label}`;
+  let msg;
+  if (state.type === 'mine' && !state.mySpots.length) msg = 'Aucun spot perso : ajoute-en dans ⚙ Paramètres → Mes spots.';
+  else if (state.type === 'fav' && !state.favs.size) msg = 'Aucun favori : touche ☆ sur une fiche pour suivre un spot.';
+  else if (!n) msg = state.sessionsOnly ? `Aucune bonne condition prévue sur 14 jours · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
+  else msg = state.sessionsOnly ? `${n} spot${pl} avec de bonnes conditions sur 14 jours · ${where}` : `${n} spot${pl} · ${where}`;
+  $('#status').textContent = msg;
   if (state.view === 'map') renderMap();
   return { list, alerts, sessAlerts };
 }
@@ -455,8 +468,9 @@ function mapStatus(s, w, day) {
   const d = w.daily;
   if (day === 'all') {
     const ses = relevantSessions(s);
-    if (ses.some((x) => x.kind !== 'ski')) return { st: 'good', n: ses.filter((x) => x.kind !== 'ski').length + ' j' };
-    if (ses.some((x) => x.kind === 'ski')) return { st: 'powder', n: ses.filter((x) => x.kind === 'ski').length + ' j' };
+    const nDays = (f) => new Set(ses.filter(f).map((x) => x.i)).size + ' j';
+    if (ses.some((x) => x.kind !== 'ski')) return { st: 'good', n: nDays((x) => x.kind !== 'ski') };
+    if (ses.some((x) => x.kind === 'ski')) return { st: 'powder', n: nDays((x) => x.kind === 'ski') };
     const n72 = summarize(w).next72;
     if (n72 >= 5) return { st: 'snowing', n: `+${round(n72)}` };
     return { st: 'none' };
@@ -479,11 +493,7 @@ function mapStatus(s, w, day) {
   if (sf >= 3) return { st: 'snowing', n: `+${round(sf)}` };
   return { st: 'none' };
 }
-function mapSpots() {
-  return allInRadius()
-    .filter((s) => (s.custom ? state.mapMine : isWind(s) ? state.mapWater : (state.mapKite && isKite(s)) || (state.mapSki && isSki(s))))
-    .filter((s) => !state.sessionsOnly || relevantSessions(s).length);
-}
+function mapSpots() { return spotsInRadius(); } // mêmes filtres que la liste
 function renderMapDays() {
   const w = Object.values(state.weather)[0];
   const el = $('#mapDays');
@@ -507,7 +517,6 @@ function renderMap() {
   }
   renderMapDays();
   $('#map').classList.toggle('picking', !!state.pickMode);
-  $('#mapGood').setAttribute('aria-pressed', state.mapGoodOnly);
   state.map.invalidateSize();
   state.markers.clearLayers();
   const muted = cssVar('--muted');
@@ -521,7 +530,7 @@ function renderMap() {
   for (const s of mapSpots()) {
     const w = state.weather[s.id];
     const { st, n } = mapStatus(s, w, state.mapDay);
-    if (state.mapGoodOnly && !MAP_STATUS[st].good) continue;
+    if (state.sessionsOnly && !MAP_STATUS[st].good) continue; // « Bonnes conditions »
     const kite = isKite(s), shape = isWind(s) ? 'wind' : kite ? 'kite' : 'ski';
     if (!seen.has(st)) seen.set(st, new Set());
     seen.get(st).add(shape);
@@ -578,7 +587,7 @@ async function refresh(force = false) {
 /* ---------- position ---------- */
 function showLoc() {
   $('#locLabel').textContent = `${state.loc.label} · ${state.loc.lat.toFixed(3)}, ${state.loc.lon.toFixed(3)}`;
-  $('#placeTxt').textContent = `${state.loc.label.replace(' (par défaut)', '')} · ${state.radius} km`;
+  $('#placeTxt').textContent = `${state.loc.label} · ${state.radius} km`;
 }
 function setLoc(loc) {
   state.loc = loc; store.set('loc', loc); showLoc(); refresh();
@@ -1019,6 +1028,7 @@ function bindUI() {
     state.sessionsOnly = !state.sessionsOnly; store.set('sessionsOnly', state.sessionsOnly);
     ses.setAttribute('aria-pressed', state.sessionsOnly);
     if (state.sessionsOnly && state.sort === 'dist') { state.sort = 'session'; $('#sort').value = 'session'; store.set('sort', 'session'); }
+    if (!state.sessionsOnly && state.sort === 'session') { state.sort = 'dist'; $('#sort').value = 'dist'; store.set('sort', 'dist'); }
     render();
   };
   const sort = $('#sort'); sort.value = state.sort;
@@ -1066,6 +1076,8 @@ function bindUI() {
       b.setAttribute('aria-pressed', state.disc[b.dataset.disc]); refresh();
     };
   });
+  const nt = $('#ntfyTopic'); nt.value = state.ntfyTopic;
+  nt.onchange = () => { state.ntfyTopic = nt.value.trim(); store.set('ntfyTopic', state.ntfyTopic); };
   const sa = $('#sessionAlert'); sa.checked = state.sessionAlert;
   sa.onchange = () => { state.sessionAlert = sa.checked; store.set('sessionAlert', sa.checked); if (sa.checked) askNotif(); render(); };
   const hz = $('#horizon'); hz.value = state.sessionHorizon; $('#horizonVal').textContent = state.sessionHorizon;
@@ -1086,6 +1098,7 @@ function bindUI() {
       default_threshold_cm: state.threshold,
       alert_all_in_radius: state.alertAll,
       spots: state.bells,
+      ntfy_topic: state.ntfyTopic || undefined,
       session_alert: state.sessionAlert,
       session_horizon_days: state.sessionHorizon,
       session_spots: [...state.favs, ...Object.keys(state.bells)].filter((v, i, a) => a.indexOf(v) === i),
@@ -1098,10 +1111,6 @@ function bindUI() {
     catch { prompt('Copie ce texte dans alerts-config.json :', txt); }
   };
 
-  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki'], ['#mapMine', 'mapMine'], ['#mapWater', 'mapWater'], ['#mapGood', 'mapGoodOnly']]) {
-    const el = $(btn); el.setAttribute('aria-pressed', state[key]);
-    el.onclick = () => { state[key] = !state[key]; store.set(key, state[key]); el.setAttribute('aria-pressed', state[key]); render(); };
-  }
   setupKiteSliders();
   document.querySelectorAll('#unitSel button').forEach((b) => {
     b.setAttribute('aria-pressed', b.dataset.unit === state.unit);

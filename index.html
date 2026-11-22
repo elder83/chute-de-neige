@@ -43,6 +43,8 @@
       <symbol id="i-wing" viewBox="0 0 24 24"><path d="M3 15c2-7 9-11 18-9-6 1-10 5-12 12zM9 18l-1 3M12 11l-3 7"/></symbol>
       <symbol id="i-windsurf" viewBox="0 0 24 24"><path d="M12 3v15M12 3c4 3 6 8 6 13h-6M3 20h18"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
       <!-- météo -->
@@ -78,8 +80,8 @@
       <button data-type="mine"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
     </div>
     <div class="row">
-      <button id="btnSessions" class="toggle" aria-pressed="false">
-        <svg class="i"><use href="#i-cal"/></svg>Sessions 14 j
+      <button id="btnSessions" class="toggle" aria-pressed="false" title="N'afficher que les spots où tes conditions sont réunies (liste : 14 jours, carte : jour choisi)">
+        <svg class="i"><use href="#i-check"/></svg>Bonnes conditions
       </button>
       <select id="sort" aria-label="Trier par">
         <option value="dist">Distance</option>
@@ -110,20 +112,20 @@
       </section>
 
       <section>
-        <h3>Unité du vent</h3>
-        <div class="seg" id="unitSel">
-          <button data-unit="kn">Nœuds</button>
-          <button data-unit="kmh">km/h</button>
+        <h3>Affichage</h3>
+        <div class="set-row"><span>Unité du vent</span>
+          <div class="seg" id="unitSel">
+            <button data-unit="kn">Nœuds</button>
+            <button data-unit="kmh">km/h</button>
+          </div>
         </div>
-      </section>
-
-      <section>
-        <h3>Disciplines affichées</h3>
-        <p class="muted small">Spots mer &amp; lacs : n'affiche que les disciplines choisies (sessions et alertes aussi).</p>
-        <div class="chips" id="discSel">
-          <button data-disc="kitesea"><svg class="i"><use href="#i-kitesea"/></svg>Kite</button>
-          <button data-disc="wing"><svg class="i"><use href="#i-wing"/></svg>Wing</button>
-          <button data-disc="windsurf"><svg class="i"><use href="#i-windsurf"/></svg>Planche</button>
+        <div class="set-row col"><span>Disciplines mer &amp; lacs</span>
+          <div class="chips" id="discSel">
+            <button data-disc="kitesea"><svg class="i"><use href="#i-kitesea"/></svg>Kite</button>
+            <button data-disc="wing"><svg class="i"><use href="#i-wing"/></svg>Wing</button>
+            <button data-disc="windsurf"><svg class="i"><use href="#i-windsurf"/></svg>Planche</button>
+          </div>
+          <small class="muted">Spots, sessions et alertes ne concernent que les disciplines choisies.</small>
         </div>
       </section>
 
@@ -169,11 +171,11 @@
 
       <section>
         <h3>Alertes</h3>
-        <p class="muted small">Neige prévue sur 3 jours au-dessus du seuil. Seuil par station : cloche sur la fiche.</p>
+        <p class="muted small"><b>☆ Suivre</b> un spot (sur sa fiche) = favori + alerte « session possible ». <b>🔔</b> = alerte chute de neige avec ton seuil (stations et spots de montagne).</p>
         <label class="range"><span>Seuil par défaut <b><output id="thrVal"></output> cm</b></span>
           <input id="threshold" type="range" min="5" max="80" step="5"></label>
-        <label class="switch"><span>Tous les spots dans mon rayon</span><input type="checkbox" id="alertAll"></label>
-        <label class="switch"><span>Alerte « session possible » <small class="muted">(favoris ★, cloches et mes spots)</small></span><input type="checkbox" id="sessionAlert"></label>
+        <label class="switch"><span>Alerte neige pour tous les spots du rayon</span><input type="checkbox" id="alertAll"></label>
+        <label class="switch"><span>Alerte « session possible » <small class="muted">(spots suivis ★, 🔔 et mes spots)</small></span><input type="checkbox" id="sessionAlert"></label>
         <label class="range"><span>Session dans les <b><output id="horizonVal"></output> prochains jours</b></span>
           <input id="horizon" type="range" min="1" max="7" step="1"></label>
         <div class="row">
@@ -182,7 +184,8 @@
         </div>
         <details>
           <summary>Alertes appli fermée (ntfy)</summary>
-          <p class="muted small">Copie ta config et colle-la dans <code>alerts-config.json</code> sur GitHub (vérification toutes les 3 h). Ce fichier est public : localise-toi avec une ville plutôt qu'avec le GPS.</p>
+          <p class="muted small">1. Indique ton sujet ntfy. 2. Copie ta config et colle-la dans <code>alerts-config.json</code> sur GitHub (vérification toutes les 3 h). Ce fichier est public : localise-toi avec une ville plutôt qu'avec le GPS.</p>
+          <input id="ntfyTopic" type="text" placeholder="Sujet ntfy (ex : neige-hyeres-k7x92p)" autocomplete="off">
           <button id="btnExport" class="btn ghost">Copier ma config</button>
           <small id="exportMsg" class="muted"></small>
         </details>
@@ -205,13 +208,6 @@
     <p id="status" class="muted small"></p>
     <div id="list"></div>
     <div id="mapWrap" hidden>
-      <div class="map-bar">
-        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-snowkite"/></svg>Snowkite</button>
-        <button id="mapSki" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-ski"/></svg>Stations</button>
-        <button id="mapWater" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-wave"/></svg>Mer &amp; lacs</button>
-        <button id="mapMine" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
-        <button id="mapGood" class="toggle" aria-pressed="false" title="N'afficher que les spots où mes conditions sont réunies"><svg class="i"><use href="#i-star"/></svg>Bonnes conditions</button>
-      </div>
       <div id="mapDays" class="d-days map-days" aria-label="Jour affiché sur la carte"></div>
       <div id="map"></div>
       <div class="map-foot"><span id="mapCount" class="muted small"></span></div>

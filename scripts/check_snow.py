@@ -160,6 +160,8 @@ def session_alerts(cfg, spots, state):
 
 def main():
     cfg = json.loads((ROOT / "alerts-config.json").read_text())
+    if not os.environ.get("NTFY_TOPIC") and cfg.get("ntfy_topic"):
+        os.environ["NTFY_TOPIC"] = cfg["ntfy_topic"]  # sujet écrit dans la config (dépôt public)
     spots = json.loads((ROOT / "spots.json").read_text())
     for extra in ("spots-osm.json", "spots-eau.json"):
         f = ROOT / extra
