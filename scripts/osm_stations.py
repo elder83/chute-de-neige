@@ -19,12 +19,16 @@ out tags bb;
 EXCLUDE = {"Courmayeur", "La Thuile", "Riserva Bianca – Limone Piemonte", "Estación de esquí de Candanchú",
            "Grandvalira", "Champéry – Les Crosets – Champoussin – Morgins", "Paradiski", "Les Portes du Soleil"}
 # Sites aussi connus pour le snowkite
-KITE = {"Snowkite Markstein": ("kite", "Site de snowkite du Markstein, crêtes vosgiennes"),
-        "Plans d'Hotonnes - Plateau de Retord": ("both", "Plateau de Retord, grands espaces ouverts pour le snowkite"),
+KITE = {"Plans d'Hotonnes - Plateau de Retord": ("both", "Plateau de Retord, grands espaces ouverts pour le snowkite"),
         "Les Estables": ("both", "Massif du Mézenc, spot de snowkite réputé"),
         "Prabouré": ("both", "Hautes Chaumes du Forez, 10 000 ha de plateaux pour le snowkite"),
         "Porte Puymorens": ("both", "École de snowkite au col du Puymorens"),
-        "Roubion-Les-Buisses": ("both", "Snowkite à la Tête du Pommier")}
+        "Roubion-Les-Buisses": ("both", "Snowkite à la Tête du Pommier"),
+        "Mijoux - La Faucille": ("both", "Monts Jura : snowkite possible sur le site"),
+        "Lélex": ("both", "Monts Jura (Lélex-Crozet) : snowkite possible"),
+        "La Rosière": ("both", "Accès au col du Petit-Saint-Bernard, spot de snowkite réputé"),
+        "Chalmazel": ("both", "Grand espace plat pour s'initier au snowkite (Hautes Chaumes)"),
+        "Snowkite Markstein": ("kite", "Site FFVL conventionné (Steinlebach), accès à pied ou par téléski")}
 
 
 def norm(s):
