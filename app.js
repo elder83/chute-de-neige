@@ -1179,7 +1179,20 @@ function bindUI() {
   });
 }
 
+/* Mode propriétaire : la section ntfy n'est visible que sur le téléphone du propriétaire.
+   Ouvrir une fois l'appli avec « ?moi » l'active ; « ?moi=0 » la désactive. */
+function ownerMode() {
+  const q = new URLSearchParams(location.search);
+  if (q.has('moi')) {
+    store.set('owner', q.get('moi') !== '0');
+    q.delete('moi');
+    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  }
+  $('#ntfyBlock').hidden = !store.get('owner', false);
+}
+
 async function init() {
+  ownerMode();
   bindUI();
   showLoc();
   const [cur, osm, eau] = await Promise.all(['spots.json', 'spots-osm.json', 'spots-eau.json'].map((f) =>
