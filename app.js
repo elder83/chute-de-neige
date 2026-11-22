@@ -32,6 +32,8 @@ const state = {
   unit: store.get('unit', 'kn'),          // unité du vent : 'kn' (nœuds) ou 'kmh'
   mapKite: store.get('mapKite', true),
   mapSki: store.get('mapSki', true),
+  mapDay: 'all',
+  mapGoodOnly: store.get('mapGoodOnly', false),
   view: 'list',
   map: null, markers: null,
 };
@@ -341,18 +343,65 @@ function render() {
          : 'Aucune session prévue dans les 14 jours dans ce rayon.')
     : (n ? `${n} spot${pl} dans un rayon de ${state.radius} km autour de ${state.loc.label}`
          : 'Aucun spot dans ce rayon — augmente la distance.');
-  if (state.view === 'map') renderMap(alertIds);
+  if (state.view === 'map') renderMap();
   return { list, alerts };
 }
 
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
+/* Statut d'un spot sur la carte selon MES conditions.
+   day = 'all' (sur 14 jours) ou index du jour (0 = aujourd'hui). */
+const MAP_STATUS = {
+  good:    { label: 'Session kite', good: true },
+  powder:  { label: 'Poudreuse', good: true },
+  snowing: { label: 'Neige qui tombe / à venir' },
+  weak:    { label: 'Neige ok, vent trop faible' },
+  strong:  { label: 'Vent trop fort / rafales' },
+  nosnow:  { label: 'Pas assez de neige' },
+  none:    { label: 'Rien de particulier' },
+};
+function mapStatus(s, w, day) {
+  if (!w) return { st: 'none' };
+  const d = w.daily;
+  if (day === 'all') {
+    const ses = relevantSessions(s);
+    if (ses.some((x) => x.kind === 'kite')) return { st: 'good', n: ses.filter((x) => x.kind === 'kite').length + ' j' };
+    if (ses.some((x) => x.kind === 'ski')) return { st: 'powder', n: ses.filter((x) => x.kind === 'ski').length + ' j' };
+    const n72 = summarize(w).next72;
+    if (n72 >= 5) return { st: 'snowing', n: `+${round(n72)}` };
+    return { st: 'none' };
+  }
+  const i = T0 + day;
+  const ses = sessionsFor(s, w).filter((x) => x.i === i);
+  const wind = d.wind_speed_10m_max[i], gust = d.wind_gusts_10m_max[i], sf = d.snowfall_sum[i] || 0;
+  if (ses.some((x) => x.kind === 'kite')) return { st: 'good', n: wv(wind) };
+  if (ses.some((x) => x.kind === 'ski')) return { st: 'powder', n: `${round((d.snowfall_sum[i - 1] || 0) + (d.snowfall_sum[i - 2] || 0))}` };
+  if (isKite(s) && state.type !== 'ski') {
+    const k = state.kite;
+    if (snowDepth(w, i) < k.minSnow) return { st: sf >= 3 ? 'snowing' : 'nosnow', n: sf >= 3 ? `+${round(sf)}` : null };
+    if (wind < k.windMin) return { st: 'weak', n: wv(wind) };
+    return { st: 'strong', n: wv(wind) };
+  }
+  if (sf >= 3) return { st: 'snowing', n: `+${round(sf)}` };
+  return { st: 'none' };
+}
 function mapSpots() {
   return allInRadius()
     .filter((s) => (state.mapKite && isKite(s)) || (state.mapSki && isSki(s)))
     .filter((s) => !state.sessionsOnly || relevantSessions(s).length);
 }
-function renderMap(alertIds) {
+function renderMapDays() {
+  const w = Object.values(state.weather)[0];
+  const el = $('#mapDays');
+  if (!w) { el.innerHTML = ''; return; }
+  const opts = [['all', '14 j']];
+  for (let j = 0; j < w.daily.time.length - T0; j++) opts.push([String(j), j === 0 ? 'Auj.' : j === 1 ? 'Dem.' : dayLong(w, T0 + j)]);
+  el.innerHTML = opts.map(([v, l]) => `<button data-d="${v}" aria-pressed="${String(state.mapDay) === v}">${l}</button>`).join('');
+  el.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { state.mapDay = b.dataset.d === 'all' ? 'all' : +b.dataset.d; render(); };
+  });
+}
+function renderMap() {
   if (!window.L) { $('#map').textContent = 'Carte indisponible.'; return; }
   if (!state.map) {
     state.map = L.map('map', { zoomControl: true, attributionControl: true });
@@ -361,36 +410,50 @@ function renderMap(alertIds) {
     }).addTo(state.map);
     state.markers = L.layerGroup().addTo(state.map);
   }
+  renderMapDays();
+  $('#mapGood').setAttribute('aria-pressed', state.mapGoodOnly);
   state.map.invalidateSize();
   state.markers.clearLayers();
-  const list = mapSpots();
-  $('#mapCount').textContent = `${list.length} sur la carte`;
   const muted = cssVar('--muted');
   const pts = [[state.loc.lat, state.loc.lon]];
   L.circleMarker([state.loc.lat, state.loc.lon], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#111827', fillOpacity: 1 })
     .bindPopup('Ta position').addTo(state.markers);
   L.circle([state.loc.lat, state.loc.lon], { radius: state.radius * 1000, color: muted, weight: 1, dashArray: '4 4', fill: false })
     .addTo(state.markers);
-  for (const s of list) {
+  const seen = new Map(); // statut -> formes présentes (légende)
+  let shown = 0;
+  for (const s of mapSpots()) {
     const w = state.weather[s.id];
-    const next72 = w ? summarize(w).next72 : 0;
-    const ses = relevantSessions(s);
-    const st = alertIds.has(s.id) || next72 >= 5 ? 'snow' : ses.length ? 'sess' : '';
+    const { st, n } = mapStatus(s, w, state.mapDay);
+    if (state.mapGoodOnly && !MAP_STATUS[st].good) continue;
     const kite = isKite(s);
-    const html = `<div class="mk ${kite ? 'kite' : 'ski'} ${st}">${icon(kite ? 'i-kite' : 'i-ski')}` +
-      (next72 >= 5 ? `<span class="mk-n">+${round(next72)}</span>` : '') + '</div>';
+    if (!seen.has(st)) seen.set(st, new Set());
+    seen.get(st).add(kite ? 'kite' : 'ski');
+    shown++;
+    const html = `<div class="mk ${kite ? 'kite' : 'ski'} st-${st}">${icon(kite ? 'i-kite' : 'i-ski')}` +
+      (n != null ? `<span class="mk-n">${n}</span>` : '') + '</div>';
     const div = document.createElement('div');
     const b = document.createElement('b'); b.textContent = s.name; div.append(b);
+    const dayTxt = state.mapDay === 'all' ? 'sur 14 jours' : dayLong(w || Object.values(state.weather)[0], T0 + state.mapDay);
     div.insertAdjacentHTML('beforeend', `<br>${kite ? 'Spot snowkite' : 'Station'} · ${s.alt} m · ${round(s.dist)} km` +
-      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()} · ${round(snowDepth(w, T0))} cm au sol<br>+${round(next72)} cm prévus sur 3 j` : '') +
-      (ses.length ? `<br>${ses.length} session${ses.length > 1 ? 's' : ''} · prochaine ${dayLong(w, ses[0].i)}` : '') +
-      `<br><a href="#" data-goto="${esc(s.id)}">Détail heure par heure</a>`);
+      `<br><span class="pop-st st-${st}">${MAP_STATUS[st].label}</span> <span class="muted">${dayTxt}</span>` +
+      (w && state.mapDay !== 'all' ? `<br>Vent max ${wv(w.daily.wind_speed_10m_max[T0 + state.mapDay])} ${U()} ${dirName(w.daily.wind_direction_10m_dominant[T0 + state.mapDay])} · raf. ${wv(w.daily.wind_gusts_10m_max[T0 + state.mapDay])} · ${round(snowDepth(w, T0 + state.mapDay))} cm au sol` : '') +
+      (w && state.mapDay === 'all' ? `<br>Maintenant : ${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()} · ${round(snowDepth(w, T0))} cm au sol` : '') +
+      `<br><a href="#" data-goto="${esc(s.id)}" data-day="${state.mapDay === 'all' ? 0 : state.mapDay}">Détail heure par heure</a>`);
     L.marker([s.lat, s.lon], {
       icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
-      zIndexOffset: kite ? 500 : 0,
+      zIndexOffset: MAP_STATUS[st].good ? 1000 : kite ? 500 : 0,
     }).bindPopup(div).addTo(state.markers);
     pts.push([s.lat, s.lon]);
   }
+  $('#mapCount').textContent = `${shown} affiché${shown > 1 ? 's' : ''}`;
+  // légende : seulement les statuts présents, avec la forme des marqueurs
+  const order = Object.keys(MAP_STATUS);
+  $('#mapLegend').innerHTML = [...seen.keys()].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((st) =>
+    `<span>${[...seen.get(st)].sort().map((f) => `<i class="lg ${f} st-${st}"></i>`).join('')}${MAP_STATUS[st].label}</span>`).join('')
+    + `<span class="lg-note">◆ spot kite · ● station · chiffre : ${state.mapDay === 'all' ? 'jours de session ou cm sur 3 j' : `vent max (${U()}) ou cm de neige`}</span>`
+    || '<span>Aucun spot ne correspond.</span>';
+  if (!seen.size) $('#mapLegend').innerHTML = '<span>Aucun spot ne correspond à ces conditions.</span>';
   if (!state.mapFitted || state.mapFitted !== `${state.loc.lat},${state.loc.lon},${state.radius}`) {
     state.map.fitBounds(pts, { padding: [24, 24], maxZoom: 9 });
     state.mapFitted = `${state.loc.lat},${state.loc.lon},${state.radius}`;
@@ -668,7 +731,7 @@ function bindUI() {
     catch { prompt('Copie ce texte dans alerts-config.json :', txt); }
   };
 
-  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki']]) {
+  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki'], ['#mapGood', 'mapGoodOnly']]) {
     const el = $(btn); el.setAttribute('aria-pressed', state[key]);
     el.onclick = () => { state[key] = !state[key]; store.set(key, state[key]); el.setAttribute('aria-pressed', state[key]); render(); };
   }
@@ -711,7 +774,7 @@ function bindUI() {
     const a = e.target.closest('[data-goto]'); if (!a) return;
     e.preventDefault();
     const sp = allInRadius().find((x) => x.id === a.dataset.goto);
-    if (sp) openDetail(sp, 0);
+    if (sp) openDetail(sp, +(a.dataset.day || 0));
   });
 }
 

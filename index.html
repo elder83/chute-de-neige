@@ -155,14 +155,14 @@
     <div id="list"></div>
     <div id="mapWrap" hidden>
       <div class="map-bar">
-        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-kite"/></svg>Spots kite</button>
+        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
         <button id="mapSki" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-ski"/></svg>Stations</button>
-        <span id="mapCount" class="muted small"></span>
+        <button id="mapGood" class="toggle" aria-pressed="false" title="N'afficher que les spots où mes conditions sont réunies"><svg class="i"><use href="#i-star"/></svg>Bonnes conditions</button>
       </div>
+      <div id="mapDays" class="d-days map-days" aria-label="Jour affiché sur la carte"></div>
       <div id="map"></div>
-      <div class="legend muted small">
-        <span><i class="lg sess"></i>session prévue</span><span><i class="lg snow"></i>neige à venir (+cm sur 3 j)</span><span><i class="lg"></i>rien de prévu</span>
-      </div>
+      <div class="map-foot"><span id="mapCount" class="muted small"></span></div>
+      <div id="mapLegend" class="legend small"></div>
     </div>
   </main>
 
