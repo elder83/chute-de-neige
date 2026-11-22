@@ -77,6 +77,8 @@ def snow_alerts(cfg, spots, state):
     home, radius = cfg["home"], cfg.get("radius_km", 400)
     targets = []
     for s in spots:
+        if s.get("type") == "wind":  # pas d'alerte neige sur les spots mer / lac
+            continue
         thr = cfg.get("spots", {}).get(s["id"])
         if thr is None and cfg.get("alert_all_in_radius") and haversine(home, s) <= radius:
             thr = cfg.get("default_threshold_cm", 20)
