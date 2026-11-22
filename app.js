@@ -140,8 +140,16 @@ function packHtml(w) {
 }
 
 /* Détection des sessions sur 14 jours */
+let sessCache = new Map(); // vidé à chaque rendu (les réglages peuvent avoir changé)
 function sessionsFor(s, w) {
   if (!w) return [];
+  const hit = sessCache.get(s.id);
+  if (hit && hit.w === w) return hit.out;
+  const out = computeSessions(s, w);
+  sessCache.set(s.id, { w, out });
+  return out;
+}
+function computeSessions(s, w) {
   const d = w.daily, out = [];
   const sf = (i) => d.snowfall_sum[i] || 0;
   for (let i = T0; i < d.time.length; i++) {
@@ -179,18 +187,21 @@ function relevantSessions(s) {
   return all;
 }
 
+let wxMem = null; // cache météo en mémoire (évite de relire le stockage à chaque fois)
 async function fetchWeather(spots) {
   const now = Date.now();
-  const cache = store.get('wxCache3', {});
+  const cache = wxMem || (wxMem = store.get('wxCache3', {}));
   const todo = spots.filter((s) => !(cache[s.id] && now - cache[s.id].t < CACHE_MIN * 60000));
-  for (let i = 0; i < todo.length; i += 40) {
-    const chunk = todo.slice(i, i + 40);
+  // spots mer/lac : pas besoin de la hauteur de neige horaire (données bien plus légères)
+  const groups = [todo.filter((s) => !isWind(s)), todo.filter(isWind)];
+  for (const [g, group] of groups.entries()) for (let i = 0; i < group.length; i += 40) {
+    const chunk = group.slice(i, i + 40);
     const p = new URLSearchParams({
       latitude: chunk.map((s) => s.lat).join(','),
       longitude: chunk.map((s) => s.lon).join(','),
       elevation: chunk.map((s) => s.alt).join(','),
       current: 'temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,snowfall,snow_depth',
-      hourly: 'snow_depth',
+      ...(g === 0 ? { hourly: 'snow_depth' } : {}),
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant',
       timezone: 'Europe/Paris',
       past_days: String(PAST),
@@ -204,15 +215,14 @@ async function fetchWeather(spots) {
       // ne garder que la hauteur de neige à midi pour chaque jour (cache léger)
       const h = w.hourly;
       if (h) {
-        w.depth = w.daily.time.map((day) => { const k = h.time.indexOf(`${day}T12:00`); return k < 0 ? null : h.snow_depth[k]; });
+        w.depth = w.daily.time.map((day, d) => h.snow_depth[d * 24 + 12] ?? null); // midi de chaque jour
         delete w.hourly; delete w.hourly_units;
       }
       cache[chunk[j].id] = { t: now, w };
     });
   }
   for (const k of Object.keys(cache)) if (now - cache[k].t > 6 * 3600000) delete cache[k];
-  store.set('wxCache3', cache);
-  try { localStorage.removeItem('wxCache'); localStorage.removeItem('wxCache2'); } catch {}
+  if (todo.length) store.set('wxCache3', cache);
   for (const s of spots) if (cache[s.id]) state.weather[s.id] = cache[s.id].w;
 }
 
@@ -329,6 +339,15 @@ async function notify(alerts) {
   fresh.forEach((a) => { sent[a.s.id] = day; });
   store.set('sentAlerts', sent);
 }
+/* Résumé compact, une entrée par type : « Snowkite auj., mer, jeu +2 » */
+function sessSummary(ses, w) {
+  const byType = new Map();
+  for (const x of ses) { const k = sessType(x); if (!byType.has(k)) byType.set(k, { x, days: [] }); byType.get(k).days.push(x.i); }
+  return [...byType.values()].map(({ x, days }) => {
+    const ds = [...new Set(days)];
+    return `<span class="sess-line ${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${ds.slice(0, 3).map((i) => dayLabel(w, i).toLowerCase()).join(', ')}${ds.length > 3 ? ` <span class="muted">+${ds.length - 3}</span>` : ''}</span>`;
+  }).join('');
+}
 function groupByDay(ses) { // sessions d'un même jour regroupées (ex. Kite · Wing · Planche)
   const m = new Map();
   for (const x of ses) { if (!m.has(x.i)) m.set(x.i, []); m.get(x.i).push(x); }
@@ -345,8 +364,7 @@ function renderAlertsBanner(alerts, sessions = []) {
   if (alerts.length) parts.push(`${alerts.length} alerte${alerts.length > 1 ? 's' : ''} neige`);
   el.innerHTML = `<button class="ab-head" aria-expanded="${open}">${icon('i-bell')}<span>${parts.join(' · ')}</span><svg class="i chev"><use href="#i-chev"/></svg></button>
     <div class="ab-body"${open ? '' : ' hidden'}>` + sessions.map((a) =>
-    `<div class="alert sess-alert" data-goto="${esc(a.s.id)}"><span class="sa-name"><b>${esc(a.s.name)}</b> <span class="muted">· session possible</span></span>
-      <span class="sa-list">${groupByDay(a.ses).map((g) => `<span class="stype">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(a.w, g[0].i)} <span class="muted">${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span></span>`).join('')}</span></div>`
+    `<div class="alert sess-alert" data-goto="${esc(a.s.id)}"><b class="sa-name">${esc(a.s.name)}</b><span class="sa-list">${sessSummary(a.ses, a.w)}</span></div>`
   ).join('') + alerts.map((a) =>
     `<div class="alert" data-goto="${esc(a.s.id)}">${icon('i-snow')}<span><b>${esc(a.s.name)}</b> · ${round(a.next72)} cm sur 3 jours <span class="muted">(seuil ${a.thr} cm)</span></span></div>`
   ).join('') + '</div>';
@@ -386,8 +404,6 @@ function renderCard(s, alerting) {
     : isWind(s) ? `${s.massif} · ${sportsLabel(s)} · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
   node.classList.toggle('mine', !!s.custom);
-  node.querySelector('.info').textContent = s.info || '';
-  node.querySelector('.links').innerHTML = linksFor(s);
 
   const fav = node.querySelector('.fav');
   fav.classList.toggle('on', state.favs.has(s.id));
@@ -425,10 +441,7 @@ function renderCard(s, alerting) {
 
   const sess = sessionsFor(s, w);
   const shown = relevantSessions(s);
-  const groups = groupByDay(shown);
-  node.querySelector('.sessions').innerHTML = (groups.length ? '<span class="sess-title">Sessions possibles</span>' : '') + groups.slice(0, 4).map((g) =>
-    `<span class="sess${g[0].far ? ' far' : ''}" title="${g[0].far ? 'Prévision lointaine, indicative' : ''}">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(w, g[0].i)} · ${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span>`
-  ).join('') + (groups.length > 4 ? `<span class="sess muted">+${groups.length - 4} j</span>` : '');
+  node.querySelector('.sessions').innerHTML = sessSummary(shown, w);
 
   const byDay = {};
   sess.forEach((x) => { byDay[x.i] = byDay[x.i] || (x.kind === 'wind' ? 'kite' : x.kind); });
@@ -438,7 +451,7 @@ function renderCard(s, alerting) {
     const sn = d.snowfall_sum[i] || 0;
     const cls = ['day', i === T0 && 'today', byDay[i] && `s-${byDay[i]}`, i - T0 >= 7 && 'far'].filter(Boolean).join(' ');
     const kd = windy(s) ? kiteRating(d.wind_speed_10m_max[i], d.wind_gusts_10m_max[i], rangeFor(s)) : null;
-    html += `<div class="${cls}" data-day="${i}" title="${dayDate(w, i).toLocaleDateString('fr-FR')} · vent max ${wv(d.wind_speed_10m_max[i])} ${U()} ${dirName(d.wind_direction_10m_dominant[i])}, rafales ${wv(d.wind_gusts_10m_max[i])} ${U()} — toucher pour le détail heure par heure">
+    html += `<div class="${cls}" data-day="${i}">
       <div class="d">${dayLabel(w, i)}</div>
       ${icon(wxId(d.weather_code[i]), 'i wx')}
       <div class="t">${round(d.temperature_2m_min[i])}/${round(d.temperature_2m_max[i])}°</div>
@@ -448,7 +461,6 @@ function renderCard(s, alerting) {
     </div>`;
   }
   node.querySelector('.days').innerHTML = html;
-  node.querySelector('.days').insertAdjacentHTML('afterend', `<p class="days-legend muted">${sess.length ? '<i class="lg-day"></i> jour coloré = session possible · ' : ''}vent max / rafales en ${U()} · touche pour le détail</p>`);
   node.addEventListener('click', (e) => {
     if (e.target.closest('a, button')) return;
     const day = e.target.closest('[data-day]');
@@ -457,13 +469,40 @@ function renderCard(s, alerting) {
   return node;
 }
 
+/* La liste se construit par paquets de 20 fiches, au fil du défilement */
+const PAGE = 20;
+let listObserver;
+function renderList(list, alertIds) {
+  const el = $('#list');
+  el.replaceChildren();
+  listObserver?.disconnect();
+  let shown = 0;
+  const more = () => {
+    const frag = document.createDocumentFragment();
+    for (const s of list.slice(shown, shown + PAGE)) frag.append(renderCard(s, alertIds.has(s.id)));
+    shown += PAGE;
+    el.append(frag);
+    if (shown < list.length) {
+      const sentinel = document.createElement('div');
+      sentinel.className = 'sentinel';
+      el.append(sentinel);
+      listObserver = new IntersectionObserver((e) => {
+        if (e[0].isIntersecting) { listObserver.disconnect(); sentinel.remove(); more(); }
+      }, { rootMargin: '600px' });
+      listObserver.observe(sentinel);
+    }
+  };
+  more();
+}
+
 function render() {
+  sessCache = new Map();
   const list = sortSpots(visibleSpots());
   const alerts = computeAlerts(spotsInRadius());
   const alertIds = new Set(alerts.map((a) => a.s.id));
   const sessAlerts = computeSessionAlerts();
   renderAlertsBanner(alerts, sessAlerts);
-  $('#list').replaceChildren(...list.map((s) => renderCard(s, alertIds.has(s.id))));
+  renderList(list, alertIds);
   const n = list.length, pl = n > 1 ? 's' : '';
   const where = `${state.radius} km autour de ${state.loc.label}`;
   let msg;
@@ -472,7 +511,8 @@ function render() {
   else if (state.q.trim()) msg = n ? `${n} résultat${pl} pour « ${state.q.trim()} » (toute la France)` : `Aucun spot ni station pour « ${state.q.trim()} »`;
   else if (!n) msg = state.sessionsOnly ? `Aucune session possible sur 14 jours · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
   else msg = state.sessionsOnly ? `${n} spot${pl} avec au moins une session possible sur 14 jours · ${where}` : `${n} spot${pl} · ${where}`;
-  $('#status').textContent = msg;
+  $('#status').innerHTML = `${esc(msg)}${state.updated ? ` · <button class="link-inline" id="statusRefresh" title="Actualiser la météo">màj ${state.updated}</button>` : ''}`;
+  $('#statusRefresh')?.addEventListener('click', () => refresh(true));
   if (state.view === 'map') renderMap();
   return { list, alerts, sessAlerts };
 }
@@ -540,10 +580,8 @@ function renderMap() {
       maxZoom: 17, attribution: '© OpenStreetMap',
     }).addTo(state.map);
     state.markers = L.layerGroup().addTo(state.map);
-    state.map.on('click', (e) => { if (state.pickMode) placeMySpot(e.latlng.lat, e.latlng.lng); });
   }
   renderMapDays();
-  $('#map').classList.toggle('picking', !!state.pickMode);
   state.map.invalidateSize();
   state.markers.clearLayers();
   const muted = cssVar('--muted');
@@ -564,6 +602,7 @@ function renderMap() {
     shown++;
     const html = `<div class="mk ${shape}${s.custom ? ' mine' : ''} st-${st}">${icon(isWind(s) ? SPORTS[primarySport(s)].icon : kite ? 'i-snowkite' : 'i-ski')}` +
       (n != null ? `<span class="mk-n">${n}</span>` : '') + '</div>';
+    const popup = () => {
     const div = document.createElement('div');
     const b = document.createElement('b'); b.textContent = s.name; div.append(b);
     const dayTxt = state.mapDay === 'all' ? 'sur 14 jours' : dayLong(w || Object.values(state.weather)[0], T0 + state.mapDay);
@@ -574,10 +613,12 @@ function renderMap() {
       (w && state.mapDay === 'all' ? `<br>Maintenant : ${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()}` +
         (isWind(s) ? '' : `<br>${round(snowPack(w).total)} cm au sol dont ${round(snowPack(w).fresh)} cm de fraîche`) : '') +
       `<br><a href="#" data-goto="${esc(s.id)}" data-day="${state.mapDay === 'all' ? 0 : state.mapDay}">Détail heure par heure et modèles</a>`);
+    return div;
+    };
     L.marker([s.lat, s.lon], {
       icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
       zIndexOffset: MAP_STATUS[st].good ? 1000 : kite ? 500 : 0,
-    }).bindPopup(div).addTo(state.markers);
+    }).bindPopup(popup).addTo(state.markers);
     pts.push([s.lat, s.lon]);
   }
   $('#mapCount').textContent = `${shown} affiché${shown > 1 ? 's' : ''}`;
@@ -596,7 +637,7 @@ function renderMap() {
 
 /* ---------- chargement ---------- */
 async function refresh(force = false) {
-  if (force) store.set('wxCache3', {});
+  if (force) { wxMem = {}; store.set('wxCache3', {}); }
   const list = allInRadius();
   $('#status').textContent = `Chargement de la météo (${list.length} spots)…`;
   try {
@@ -607,6 +648,7 @@ async function refresh(force = false) {
     $('#status').textContent = 'Impossible de charger la météo (connexion ?). Données en cache affichées.';
     return;
   }
+  state.updated = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const { alerts, sessAlerts } = render();
   notify(alerts);
   notifySessions(sessAlerts);
@@ -764,13 +806,6 @@ async function addMySpot(lat, lon, name, sport) {
   return spot;
 }
 function formSpot() { return { name: $('#msName').value.trim(), sport: $('#msSport').value }; }
-function placeMySpot(lat, lon) {
-  const f = state.pickMode; state.pickMode = null;
-  $('#map').classList.remove('picking');
-  const name = prompt('Nom du spot :', f?.name || 'Mon spot');
-  if (name === null) return;
-  addMySpot(lat, lon, name.trim(), f?.sport || 'kitesea');
-}
 let msTimer;
 function searchSpotPlace(q) {
   clearTimeout(msTimer);
@@ -822,6 +857,7 @@ async function openDetail(s, day = 0, tab) {
   $('#dTitle').innerHTML = typeIcons(s); $('#dTitle').append(s.name);
   $('#dMeta').textContent = s.custom ? `Mon spot · ${SPORTS[sportOf(s)].label} · ${s.alt} m · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
+  $('#dLinks').innerHTML = (s.info ? `<p class="d-info">${esc(s.info)}</p>` : '') + `<div class="links">${linksFor(s)}</div>`;
   if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
   showDetailTab();
 }
@@ -1058,14 +1094,9 @@ async function shareApp() {
 }
 
 /* ---------- init ---------- */
-function goTo(id) {
-  if (state.view !== 'list') document.querySelector('.tabs button[data-view="list"]').click();
-  let card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  if (!card) { // la fiche est masquée par un filtre : on revient sur « Tout »
-    document.querySelector('#typeFilter button[data-type="all"]').click();
-    card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  }
-  setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+function goTo(id) { // ouvre directement le détail du spot
+  const sp = allSpots().map((x) => ({ ...x, dist: haversine(state.loc, x) })).find((x) => x.id === id);
+  if (sp) openDetail(sp, 0);
 }
 function bindUI() {
   const radius = $('#radius');
@@ -1078,7 +1109,7 @@ function bindUI() {
     b.onclick = () => {
       state.type = b.dataset.type; store.set('type', state.type);
       document.querySelectorAll('#typeFilter button').forEach((x) => x.classList.toggle('active', x === b));
-      refresh();
+      render(); window.scrollTo({ top: 0 });
     };
   });
   const ses = $('#btnSessions');
@@ -1136,7 +1167,7 @@ function bindUI() {
       b.setAttribute('aria-pressed', on);
       const names = Object.keys(state.disc).filter((x) => state.disc[x]).map((x) => SESS_TYPE[x]);
       toast(names.length ? `Disciplines affichées : ${names.join(', ')}` : 'Aucune discipline : spots mer & lacs masqués');
-      refresh();
+      render();
     };
   });
   const nt = $('#ntfyTopic'); nt.value = state.ntfyTopic;
@@ -1188,7 +1219,6 @@ function bindUI() {
 
   $('#btnGeo').onclick = geolocate;
   $('#locInput').oninput = (e) => searchCity(e.target.value);
-  $('#btnRefresh').onclick = () => refresh(true);
   $('#btnShare').onclick = shareApp;
   $('#btnHelp').onclick = openHelp;
   $('#helpDlg').addEventListener('click', (e) => {

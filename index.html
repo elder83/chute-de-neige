@@ -64,7 +64,6 @@
     <h1><svg class="i"><use href="#i-snow"/></svg> Chute de neige</h1>
     <div class="top-actions">
       <button id="btnShare" class="icon-btn" title="Partager l'appli" aria-label="Partager l'appli"><svg class="i"><use href="#i-share"/></svg></button>
-      <button id="btnRefresh" class="icon-btn" title="Actualiser" aria-label="Actualiser"><svg class="i"><use href="#i-refresh"/></svg></button>
       <button id="btnSettings" class="icon-btn" title="Paramètres" aria-label="Paramètres"><svg class="i"><use href="#i-gear"/></svg></button>
     </div>
   </header>
@@ -214,6 +213,7 @@
 
   <main>
     <p id="status" class="muted small"></p>
+    <p class="list-legend muted"><i class="lg-day"></i> jour coloré = session possible · touche une fiche pour le détail heure par heure</p>
     <div id="list"></div>
     <div id="mapWrap" hidden>
       <div id="mapDays" class="d-days map-days" aria-label="Jour affiché sur la carte"></div>
@@ -243,8 +243,6 @@
       <div class="now"></div>
       <div class="sessions"></div>
       <div class="days"></div>
-      <p class="info muted"></p>
-      <div class="links"></div>
     </article>
   </template>
 
@@ -257,6 +255,7 @@
       <button id="dMapBtn" class="icon-btn" title="Voir sur la carte" aria-label="Voir sur la carte"><svg class="i"><use href="#i-map"/></svg></button>
       <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
     </div>
+    <div id="dLinks" class="d-links"></div>
     <div class="d-tabs"><div class="seg" id="dTabs">
       <button data-tab="models">Vent multi-modèles</button>
       <button data-tab="hours">Heure par heure</button>

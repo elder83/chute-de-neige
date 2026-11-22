@@ -498,3 +498,19 @@ h2[tabindex]:focus { outline: none; }
 .help-list li .i { flex: none; margin-top: 2px; color: var(--tc, var(--muted)); }
 .help-list li b:first-child { color: var(--tc, inherit); }
 .help-list.plain li { display: list-item; margin-left: 18px; list-style: disc; }
+
+/* ---- Audit : fiche allégée ---- */
+.sessions { gap: 4px 14px; margin-bottom: 10px; }
+.sess-line { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
+.sess-line .i { width: 15px; height: 15px; color: var(--tc); }
+.sess-line b { color: var(--tc); font-weight: 600; }
+.list-legend { font-size: 12px; margin: -4px 0 10px; }
+.sentinel { height: 1px; }
+.link-inline { background: none; border: none; padding: 0; color: var(--muted); text-decoration: underline; font-size: inherit; }
+/* liens et description dans le détail */
+.d-links { padding: 8px 16px 0; flex: none; }
+.d-links .d-info { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.d-links .links { margin-top: 0; padding-top: 0; border-top: none; }
+
+#alertsBanner .sess-alert { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+#alertsBanner .sa-list { gap: 4px 12px; }
