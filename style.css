@@ -402,3 +402,11 @@ h2[tabindex]:focus { outline: none; }
 .wg-scale span { flex: 1; text-align: center; padding: 2px 0; }
 .wg-scale em { font-style: normal; color: var(--muted); margin-left: 6px; }
 .d-kite > span { flex: 1; min-width: 0; }
+
+/* Bandeau session : type de session bien visible */
+#alertsBanner .sess-alert { flex-direction: column; align-items: flex-start; gap: 6px; border-left-color: var(--good); }
+.sa-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.stype { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px 2px 7px; background: var(--bg); }
+.stype .i { width: 15px; height: 15px; }
+#alertsBanner .stype.kite .i { color: var(--good); }
+#alertsBanner .stype.ski .i { color: var(--snow); }

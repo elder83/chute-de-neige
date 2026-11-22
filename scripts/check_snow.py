@@ -20,7 +20,8 @@ DEFAULT_RANGES = {  # km/h
     "wing": {"windMin": 22, "windMax": 52, "gustMax": 65},
     "windsurf": {"windMin": 26, "windMax": 65, "gustMax": 78},
 }
-LABEL = {"kite": "snowkite", "kitesea": "kite", "wing": "wing", "windsurf": "planche"}
+LABEL = {"kite": "Snowkite", "kitesea": "Kite", "wing": "Wing", "windsurf": "Planche", "ski": "Ski poudreuse"}
+PAST = 2  # jours passés demandés (neige fraîche pour la poudreuse)
 
 
 def haversine(a, b):
@@ -98,45 +99,59 @@ def session_alerts(cfg, spots, state):
     horizon = int(cfg.get("session_horizon_days", 3))
     ranges = {**DEFAULT_RANGES, **cfg.get("ranges_kmh", {})}
     ids = set(cfg.get("session_spots", []))
-    targets = [s for s in spots if s["id"] in ids and s.get("type") in ("kite", "both")]
+    targets = [s for s in spots if s["id"] in ids]
     targets += cfg.get("my_spots", [])
     if not targets:
         print("Sessions : aucun spot à surveiller.")
         return
     data = forecast(targets, {
-        "daily": "wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,weather_code",
-        "hourly": "snow_depth", "forecast_days": horizon,
+        "daily": "wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,weather_code,snowfall_sum",
+        "hourly": "snow_depth", "forecast_days": horizon, "past_days": PAST,
     })
     hits = []
     for s, w in zip(targets, data):
+        typ = s.get("type")
         sport = s.get("sport") or "kite"
         r = ranges.get(sport, DEFAULT_RANGES["kitesea"])
         d, h = w["daily"], w.get("hourly", {})
-        for i, day in enumerate(d["time"]):
-            wind, gust, code = d["wind_speed_10m_max"][i], d["wind_gusts_10m_max"][i], d["weather_code"][i]
+        sf = lambda i: d["snowfall_sum"][i] or 0
+        for i in range(PAST, len(d["time"])):
+            day = d["time"][i]
+            wind, gust, code = d["wind_speed_10m_max"][i], d["wind_gusts_10m_max"][i], d["weather_code"][i] or 0
             if wind is None or gust is None:
                 continue
-            ok = r["windMin"] <= wind <= r["windMax"] and gust <= r["gustMax"] and (code or 0) < 95
-            if ok and sport == "kite":
-                try:
-                    depth = h["snow_depth"][h["time"].index(f"{day}T12:00")] or 0
-                except (KeyError, ValueError):
-                    depth = 0
-                ok = depth * 100 >= r.get("minSnow", 10)
-            if ok:
-                dirn = DIRS[round((d["wind_direction_10m_dominant"][i] or 0) / 45) % 8]
-                hits.append((s, day, f"{wind / KN:.0f} nds {dirn}, raf. {gust / KN:.0f}"))
-                print(f"Session {s['name']} {day} : {wind / KN:.0f} nds")
-    fresh = [(s, day, t) for s, day, t in hits if f"{s['id']}:{day}" not in state]
+            rain = 51 <= code <= 67 or 80 <= code <= 82
+            dirn = DIRS[round((d["wind_direction_10m_dominant"][i] or 0) / 45) % 8]
+            # vent : snowkite (spots kite) ou kite/wing/planche (mes spots)
+            if typ in ("kite", "both", "wind"):
+                ok = r["windMin"] <= wind <= r["windMax"] and gust <= r["gustMax"] and code < 95
+                if ok and typ != "wind":
+                    try:
+                        depth = h["snow_depth"][h["time"].index(f"{day}T12:00")] or 0
+                    except (KeyError, ValueError):
+                        depth = 0
+                    ok = depth * 100 >= r.get("minSnow", 10)
+                if ok:
+                    kind = sport if typ == "wind" else "kite"
+                    hits.append((s, day, kind, f"{wind / KN:.0f} nds {dirn}, raf. {gust / KN:.0f}"))
+                    print(f"Session {LABEL[kind]} {s['name']} {day} : {wind / KN:.0f} nds")
+            # poudreuse : ≥ 10 cm les 2 jours d'avant, puis journée calme (stations)
+            if typ in ("ski", "both"):
+                fresh = sf(i - 1) + sf(i - 2)
+                if fresh >= 10 and sf(i) < 3 and wind <= 45 and code < 95 and not rain:
+                    hits.append((s, day, "ski", f"{fresh:.0f} cm de fraîche"))
+                    print(f"Session Ski poudreuse {s['name']} {day} : {fresh:.0f} cm")
+    fresh = [(s, day, k, t) for s, day, k, t in hits if f"{s['id']}:{day}:{k}" not in state]
     if not fresh:
         print("Sessions : pas de nouvelle session.")
         return
     jours = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"]
     lab = lambda day: f"{jours[datetime.date.fromisoformat(day).weekday()]} {int(day[8:])}"
-    body = "\n".join(f"{s['name']} ({LABEL.get(s.get('sport') or 'kite', 'kite')}) · {lab(day)} · {t}" for s, day, t in fresh)
-    if send(f"Session possible sur {len({s['id'] for s, _, _ in fresh})} spot(s)", body, "kite,wind_face"):
-        for s, day, _ in fresh:
-            state[f"{s['id']}:{day}"] = datetime.date.today().isoformat()
+    body = "\n".join(f"{LABEL[k]} · {s['name']} · {lab(day)} · {t}" for s, day, k, t in fresh)
+    types = ", ".join(dict.fromkeys(LABEL[k] for _, _, k, _ in fresh))
+    if send(f"Session possible : {types}", body, "kite,ski"):
+        for s, day, k, _ in fresh:
+            state[f"{s['id']}:{day}:{k}"] = datetime.date.today().isoformat()
         print(f"Sessions : notification envoyée ({len(fresh)} créneau(x)).")
 
 

@@ -242,6 +242,11 @@ function computeAlerts(list) {
   }
   return out.sort((a, b) => b.next72 - a.next72);
 }
+/* Type de session, affiché partout (bandeau, fiches, notifications) */
+const SESS_TYPE = { kite: 'Snowkite', ski: 'Ski poudreuse', kitesea: 'Kite', wing: 'Wing', windsurf: 'Planche' };
+const sessType = (x) => SESS_TYPE[x.kind === 'wind' ? x.sport : x.kind];
+const sessIcon = (x) => (x.kind === 'ski' ? 'i-ski' : x.kind === 'wind' ? SPORTS[x.sport].icon : 'i-kite');
+
 /* Alerte « session possible » : favoris, spots avec cloche et mes spots */
 function sessionAlertTargets() {
   return allInRadius().filter((s) => s.custom || state.favs.has(s.id) || state.bells[s.id] != null);
@@ -251,7 +256,7 @@ function computeSessionAlerts() {
   const out = [];
   for (const s of sessionAlertTargets()) {
     const w = state.weather[s.id];
-    const ses = sessionsFor(s, w).filter((x) => x.kind !== 'ski' && x.i - T0 < state.sessionHorizon);
+    const ses = sessionsFor(s, w).filter((x) => x.i - T0 < state.sessionHorizon);
     if (ses.length) out.push({ s, ses, w });
   }
   return out.sort((a, b) => a.ses[0].i - b.ses[0].i);
@@ -274,8 +279,9 @@ async function notifySessions(list) {
   for (const k of Object.keys(sent)) if (Date.now() - sent[k] > 20 * 864e5) delete sent[k];
   store.set('sentSessions', sent);
   if (!fresh.length) return;
-  const body = fresh.slice(0, 6).map(({ a, x }) => `${a.s.name} · ${dayLong(a.w, x.i)} · ${x.txt}`).join('\n');
-  await pushNotif(`Session possible sur ${new Set(fresh.map((f) => f.a.s.id)).size} spot(s)`, body, 'session');
+  const body = fresh.slice(0, 6).map(({ a, x }) => `${sessType(x)} · ${a.s.name} · ${dayLong(a.w, x.i)} · ${x.txt}`).join('\n');
+  const types = [...new Set(fresh.map(({ x }) => sessType(x)))].join(', ');
+  await pushNotif(`Session possible : ${types}`, body, 'session');
 }
 async function notify(alerts) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -293,7 +299,8 @@ function renderAlertsBanner(alerts, sessions = []) {
   const el = $('#alertsBanner');
   el.hidden = !alerts.length && !sessions.length;
   el.innerHTML = sessions.map((a) =>
-    `<div class="alert sess-alert" data-goto="${esc(a.s.id)}">${icon(SPORTS[sportOf(a.s)].icon)}<span><b>${esc(a.s.name)}</b> · session possible ${a.ses.map((x) => `<b>${dayLong(a.w, x.i)}</b> (${x.txt})`).join(', ')}</span></div>`
+    `<div class="alert sess-alert" data-goto="${esc(a.s.id)}"><span class="sa-name"><b>${esc(a.s.name)}</b> <span class="muted">· session possible</span></span>
+      <span class="sa-list">${a.ses.map((x) => `<span class="stype ${x.kind === 'ski' ? 'ski' : 'kite'}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(a.w, x.i)} <span class="muted">${x.txt.replace(/^poudreuse /, '')}</span></span>`).join('')}</span></div>`
   ).join('') + alerts.map((a) =>
     `<div class="alert" data-goto="${esc(a.s.id)}">${icon('i-snow')}<span><b>${esc(a.s.name)}</b> · ${round(a.next72)} cm sur 3 jours <span class="muted">(seuil ${a.thr} cm)</span></span></div>`
   ).join('');
@@ -365,7 +372,7 @@ function renderCard(s, alerting) {
   const sess = sessionsFor(s, w);
   const shown = relevantSessions(s);
   node.querySelector('.sessions').innerHTML = shown.slice(0, 6).map((x) =>
-    `<span class="sess ${x.kind === 'wind' ? 'kite' : x.kind}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(x.kind === 'ski' ? 'i-ski' : x.kind === 'wind' ? SPORTS[x.sport].icon : 'i-kite')}<b>${dayLong(w, x.i)}</b> ${x.txt}</span>`
+    `<span class="sess ${x.kind === 'wind' ? 'kite' : x.kind}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(w, x.i)} · ${x.txt.replace(/^poudreuse /, '')}</span>`
   ).join('') + (shown.length > 6 ? `<span class="sess muted">+${shown.length - 6}</span>` : '');
 
   const byDay = {};
