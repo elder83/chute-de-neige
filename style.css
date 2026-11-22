@@ -549,3 +549,15 @@ h2[tabindex]:focus { outline: none; }
 .adj-ctl .icon-btn { font-size: 18px; line-height: 1; padding: 4px 8px; color: var(--text); }
 .adj-ctl b { min-width: 84px; text-align: center; font-weight: 600; font-size: 13px; color: var(--muted); }
 .adj-ctl b.on { color: var(--accent); }
+
+/* vote % et probabilités 10 jours */
+.wg tr.vote td { font-weight: 700; font-size: 11.5px; height: 20px; }
+.wg tr.vote th { color: var(--good); font-weight: 600; }
+.ens { margin: 14px 0 6px; }
+.ens h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ens-rows { display: grid; gap: 5px; }
+.ens-row { display: grid; grid-template-columns: 52px 1fr 44px auto; align-items: center; gap: 8px; font-size: 13px; }
+.ens-d { text-transform: capitalize; color: var(--muted); }
+.ens-bar { height: 10px; border-radius: 5px; background: var(--faint); overflow: hidden; }
+.ens-bar i { display: block; height: 100%; background: var(--good); border-radius: 5px; }
+.ens-row b { text-align: right; font-variant-numeric: tabular-nums; }

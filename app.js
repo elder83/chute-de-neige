@@ -1026,21 +1026,95 @@ function wgCell(kmh, cls = '') {
 }
 /* « Mix Chute de neige » : moyenne pondérée des modèles (les plus fins comptent plus),
    direction en moyenne vectorielle, fiabilité selon l'écart entre modèles. */
-function mixAt(get, i) {
-  let sw = 0, ws = 0, gs = 0, gw = 0, u = 0, v = 0;
-  const vals = [];
+function wMedian(pairs) { // médiane pondérée : [[valeur, poids], …]
+  const a = pairs.filter(([x]) => x != null).sort((p, q) => p[0] - q[0]);
+  if (!a.length) return null;
+  const half = a.reduce((t, [, w]) => t + w, 0) / 2;
+  let c = 0;
+  for (const [x, w] of a) { c += w; if (c >= half) return x; }
+  return a.at(-1)[0];
+}
+/* « Mix » : médiane pondérée des modèles (les plus fins comptent plus) — un modèle isolé
+   ne tire plus tout ; direction en moyenne vectorielle ; vote = part (pondérée) des modèles
+   qui donnent une session ; fiabilité selon l'écart entre modèles. */
+function mixAt(get, i, r) {
+  let sw = 0, u = 0, v = 0, ok = 0;
+  const ws = [], gs = [];
   for (const [m] of MODELS) {
     const x = get('wind_speed_10m', m, i); if (x == null) continue;
-    const wt = MIX_W[m] || 1; sw += wt; ws += wt * x; vals.push([x, wt]);
-    const g = get('wind_gusts_10m', m, i); if (g != null) { gs += wt * g; gw += wt; }
+    const wt = MIX_W[m] || 1, g = get('wind_gusts_10m', m, i);
+    sw += wt; ws.push([x, wt]); gs.push([g, wt]);
+    if (r && x >= r.windMin && x <= r.windMax && (g == null || g <= r.gustMax)) ok += wt;
     const d = get('wind_direction_10m', m, i);
-    if (d != null) { const r = (d * Math.PI) / 180; u += wt * x * Math.sin(r); v += wt * x * Math.cos(r); }
+    if (d != null) { const a = (d * Math.PI) / 180; u += wt * x * Math.sin(a); v += wt * x * Math.cos(a); }
   }
   if (!sw) return null;
-  const mean = ws / sw;
-  const sd = Math.sqrt(vals.reduce((a, [x, wt]) => a + wt * (x - mean) ** 2, 0) / sw) / KN; // en nœuds
-  const conf = vals.length < 2 ? 'one' : sd < 2.5 ? 'hi' : sd < 5 ? 'mid' : 'lo';
-  return { wind: mean, gust: gw ? gs / gw : null, dir: (Math.atan2(u, v) * 180 / Math.PI + 360) % 360, conf, n: vals.length };
+  const med = wMedian(ws);
+  const mean = ws.reduce((t, [x, wt]) => t + x * wt, 0) / sw;
+  const sd = Math.sqrt(ws.reduce((a, [x, wt]) => a + wt * (x - mean) ** 2, 0) / sw) / KN; // en nœuds
+  const conf = ws.length < 2 ? 'one' : sd < 2.5 ? 'hi' : sd < 5 ? 'mid' : 'lo';
+  return { wind: med, gust: wMedian(gs), dir: (Math.atan2(u, v) * 180 / Math.PI + 360) % 360, conf, n: ws.length, vote: Math.round((ok / sw) * 100) };
+}
+/* Ensembles : chaque centre fait tourner son modèle 30 à 50 fois avec de petites variations.
+   Probabilité de session par jour = part des scénarios où, en journée (9h–18h), le vent reste
+   au moins 2 h dans ta plage. */
+const ENS_MODELS = ['ecmwf_ifs025', 'icon_seamless', 'gfs_seamless'];
+const ensCache = {};
+async function fetchEnsemble(s) {
+  const c = ensCache[s.id];
+  if (c && Date.now() - c.t < 3 * 3600e3) return c.h;
+  const base = { latitude: s.lat, longitude: s.lon, elevation: s.alt, hourly: 'wind_speed_10m,wind_gusts_10m', timezone: 'Europe/Paris', forecast_days: '10' };
+  let h = null;
+  for (const models of [ENS_MODELS.join(','), 'ecmwf_ifs025']) { // repli si un ensemble est indisponible
+    try {
+      const r = await fetch(`https://ensemble-api.open-meteo.com/v1/ensemble?${new URLSearchParams({ ...base, models })}`);
+      if (r.ok) { h = (await r.json()).hourly; break; }
+    } catch {}
+  }
+  if (!h) throw new Error('ensembles indisponibles');
+  ensCache[s.id] = { t: Date.now(), h };
+  return h;
+}
+function ensProba(s, h) {
+  const r = rangeFor(s), f = adjOf(s), wd = wx(s);
+  const members = Object.keys(h).filter((k) => k.startsWith('wind_speed_10m'));
+  const days = [...new Set(h.time.map((t) => t.slice(0, 10)))];
+  return days.map((day) => {
+    const idx = h.time.map((t, i) => [t, i]).filter(([t]) => t.startsWith(day) && +t.slice(11, 13) >= 9 && +t.slice(11, 13) <= 18).map(([, i]) => i);
+    let snow = true;
+    if (isKite(s) && wd) { const di = wd.daily.time.indexOf(day); snow = di < 0 || snowDepth(wd, di) >= state.kite.minSnow; }
+    let n = 0, ok = 0;
+    for (const k of members) {
+      const ws = h[k], gs = h[k.replace('wind_speed_10m', 'wind_gusts_10m')];
+      if (!ws || idx.every((i) => ws[i] == null)) continue;
+      n++;
+      const good = idx.filter((i) => {
+        const x = ws[i] == null ? null : ws[i] * f, g = gs?.[i] == null ? null : gs[i] * f;
+        return x != null && x >= r.windMin && x <= r.windMax && (g == null || g <= r.gustMax);
+      }).length;
+      if (snow && good >= 2) ok++;
+    }
+    return { day, n, p: n ? Math.round((ok / n) * 100) : null, snow };
+  });
+}
+async function renderEnsemble(s) {
+  const box = $('#ensBox'); if (!box || !windy(s)) return;
+  box.innerHTML = '<p class="muted small">Calcul des probabilités sur 10 jours…</p>';
+  try {
+    const h = await fetchEnsemble(s);
+    if (detail.spot !== s || detail.tab !== 'models' || !$('#ensBox')) return;
+    const rows = ensProba(s, h);
+    const n = Math.max(...rows.map((x) => x.n));
+    const today = new Date().toLocaleDateString('sv-SE');
+    $('#ensBox').innerHTML = `<h4>Probabilité de session · 10 jours</h4>
+      <div class="ens-rows">${rows.map((x) => {
+        const lbl = x.day === today ? 'Auj.' : new Date(x.day + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', '');
+        return `<div class="ens-row"><span class="ens-d">${lbl}</span><span class="ens-bar"><i style="width:${x.p || 0}%"></i></span><b>${x.p == null ? '–' : x.p + ' %'}</b>${x.snow ? '' : '<small class="muted">neige</small>'}</div>`;
+      }).join('')}</div>
+      <p class="muted small">Part des ${n} scénarios (ECMWF, ICON, GFS) où le vent reste au moins 2 h entre 9h et 18h dans ta plage${isKite(s) ? ', avec assez de neige au sol' : ''}. Plus fiable que le Mix au-delà de 3 jours.</p>`;
+  } catch {
+    if ($('#ensBox')) $('#ensBox').innerHTML = '<p class="muted small">Probabilités sur 10 jours indisponibles pour le moment.</p>';
+  }
 }
 function renderModels() {
   const s = detail.spot, h = detail.models, f = adjOf(s);
@@ -1059,8 +1133,14 @@ function renderModels() {
   const dLbl = (d) => (d === today ? 'Auj.'
     : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', ''));
   const r = rangeFor(s);
-  const mixes = cols.map(([, i]) => mixAt(get, i));
-  const okCol = mixes.map((mx) => windy(s) && mx && mx.wind >= r.windMin && mx.wind <= r.windMax && (mx.gust == null || mx.gust <= r.gustMax));
+  // snowkite : pas de session sans assez de neige au sol ce jour-là
+  const wd = wx(s);
+  const snowOk = (t) => {
+    if (!isKite(s) || !wd) return true;
+    const i = wd.daily.time.indexOf(t.slice(0, 10));
+    return i < 0 || snowDepth(wd, i) >= state.kite.minSnow;
+  };
+  const mixes = cols.map(([t, i]) => mixAt(get, i, windy(s) && snowOk(t) ? r : null));
   const dayStart = new Set(); let acc = 0; for (const d of days) { dayStart.add(acc); acc += d.n; }
   const ds = (k) => (dayStart.has(k) && k ? 'ds' : '');
   const CONF = { hi: ['élevée', 'hi'], mid: ['moyenne', 'mid'], lo: ['faible', 'lo'], one: ['1 seul modèle', 'one'] };
@@ -1084,12 +1164,15 @@ function renderModels() {
     return `<td class="${ds(k)}${sn >= 0.2 ? ' snow' : ''}">${sn >= 0.2 ? round(sn, sn < 10 ? 1 : 0) : ''}</td>`;
   }).join('');
   $('#dBody').innerHTML = `
-    ${windy(s) ? `<p class="d-kite">${icon(SPORTS[sportOf(s)].icon)}<span>Ta plage ${SPORTS[sportOf(s)].label} : <b>${wv(r.windMin)}–${wv(r.windMax)} ${U()}</b>, rafales ≤ ${wv(r.gustMax)} <span class="muted">· ✓ = dans ta plage selon le Mix</span></span></p>` : ''}
+    ${windy(s) ? `<p class="d-kite">${icon(SPORTS[sportOf(s)].icon)}<span>Ta plage ${SPORTS[sportOf(s)].label} : <b>${wv(r.windMin)}–${wv(r.windMax)} ${U()}</b>, rafales ≤ ${wv(r.gustMax)} <span class="muted">· ligne « session » = % des modèles (pondérés) qui te donnent une session</span></span></p>` : ''}
     <div class="wg-wrap"><table class="wg">
       <thead>
         <tr class="wg-days"><th></th>${days.map((d) => `<th colspan="${d.n}" class="ds">${dLbl(d.d)}</th>`).join('')}</tr>
         <tr class="hrs"><th>${U()}</th>${cols.map(([t], k) => `<th class="${ds(k)}">${+t.slice(11, 13)}h</th>`).join('')}</tr>
-        ${windy(s) ? `<tr class="ok"><th></th>${okCol.map((o, k) => `<td class="${ds(k)}">${o ? '✓' : ''}</td>`).join('')}</tr>` : ''}
+        ${windy(s) ? `<tr class="vote"><th title="Part des modèles (pondérée) qui donnent une session">session</th>${mixes.map((mx, k) => {
+          const pct = mx ? mx.vote : null;
+          return `<td class="${ds(k)}" style="${pct ? `background:rgba(22,163,74,${(0.12 + pct / 100 * 0.6).toFixed(2)});color:${pct >= 60 ? '#fff' : 'inherit'}` : ''}">${pct == null ? '' : pct ? pct : '·'}</td>`;
+        }).join('')}</tr>` : ''}
       </thead>
       <tbody>
         ${rows}
@@ -1100,7 +1183,9 @@ function renderModels() {
     </table></div>
     <div class="wg-scale">${[0, 5, 10, 15, 20, 25, 30, 35, 40].map((kn) =>
       `<span style="background:${windColor(kn)};color:${kn >= 30 ? '#fff' : '#111'}">${state.unit === 'kn' ? kn : Math.round(kn * KN)}</span>`).join('')}<em>${U()}</em></div>
-    <p class="muted small"><b>Mix</b> = mon modèle : moyenne pondérée des modèles disponibles, les plus fins comptant le plus (AROME ×4, ICON-D2 ×3, ARPEGE et ICON-EU ×2, ECMWF ×1,5, GFS ×1). <b>Fiabilité</b> : <i class="cf hi"></i> modèles d'accord, <i class="cf mid"></i> écart moyen, <i class="cf lo"></i> modèles en désaccord. ${f !== 1 ? `Vent corrigé de ${state.windAdj[s.id] > 0 ? '+' : ''}${state.windAdj[s.id]} % pour ce spot. ` : ''}Pas de 3 h, fais défiler vers la droite. Données Open-Meteo.</p>`;
+    <div id="ensBox" class="ens"></div>
+    <p class="muted small"><b>Mix</b> = mon modèle : médiane pondérée des modèles disponibles, les plus fins comptant le plus (AROME ×4, ICON-D2 ×3, ARPEGE et ICON-EU ×2, ECMWF ×1,5, GFS ×1) ; un modèle isolé ne fausse pas le résultat. <b>Session %</b> : part des modèles, pondérée, qui te donnent une session. <b>Fiabilité</b> : <i class="cf hi"></i> modèles d'accord, <i class="cf mid"></i> écart moyen, <i class="cf lo"></i> modèles en désaccord. ${f !== 1 ? `Vent corrigé de ${state.windAdj[s.id] > 0 ? '+' : ''}${state.windAdj[s.id]} % pour ce spot. ` : ''}Pas de 3 h, fais défiler vers la droite. Données Open-Meteo.</p>`;
+  renderEnsemble(s);
 }
 function hourKiteClass(s, wind, gust, depth) {
   if (!windy(s)) return '';

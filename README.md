@@ -8,7 +8,7 @@ Petite appli web (installable sur téléphone) pour suivre les **spots de snowki
 - 🎨 un **logo et une couleur par type de session** : Snowkite, Ski poudreuse, Kite, Wing, Planche
 - 🗺️ **carte en fenêtre** pour placer un spot ou voir où il se trouve
 - 🌬️ **mes spots** (kite mer/lac, wing, planche à voile, snowkite perso) avec une plage de vent par sport
-- 📊 **grille de vent multi-modèles façon Windguru** (AROME, ICON-D2, ARPEGE, ICON-EU, ECMWF, GFS) avec le **Mix** (moyenne pondérée, les modèles fins comptent plus) et un indice de fiabilité
+- 📊 **grille de vent multi-modèles façon Windguru** (AROME, ICON-D2, ARPEGE, ICON-EU, ECMWF, GFS) avec le **Mix** (médiane pondérée, les modèles fins comptent plus), le **% de modèles** qui donnent une session, un indice de fiabilité et la **probabilité de session sur 10 jours** (ensembles ECMWF, ICON, GFS)
 - 🏔️ **correction du vent par spot** (effet de col, relief) et sessions des 2 premiers jours recalculées avec Météo-France pour les spots suivis en touchant une fiche ou un marqueur
 - 🔔 **alerte « session possible »** (Snowkite, Ski poudreuse, Kite, Wing, Planche) sur les favoris, les spots avec cloche et mes spots (dans l'appli et via ntfy)
 - 🕐 **détail heure par heure** en touchant une fiche (vent, rafales, direction, température, neige), créneaux kite en vert
