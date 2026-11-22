@@ -32,7 +32,6 @@
 {"id": "osm-domaine-autrans-meaudre", "name": "Domaine Autrans - Méaudre", "type": "ski", "massif": "Vercors", "lat": 45.1781, "lon": 5.5435, "alt": 1048},
 {"id": "osm-domaine-les-monts-d-olmes", "name": "Domaine Les Monts d'Olmes", "type": "ski", "massif": "Pyrénées (Ariège)", "lat": 42.8371, "lon": 1.7433, "alt": 1606},
 {"id": "osm-domaine-nordique-vallon-de-champagny-le-haut", "name": "Domaine Nordique - Vallon de Champagny le Haut", "type": "ski", "massif": "Tarentaise", "lat": 45.4542, "lon": 6.7519, "alt": 1503, "web": "https://www.la-plagne.com/savourez-une-multitude-d-activites/du-ski-aux-multiples-facettes/ski-de-fond-ski-nordique/itineraires-de-ski-de-fond/domaine-nordique-vallon-de-champagny-le-haut"},
-{"id": "osm-domaine-nordique-peisey-vallandry", "name": "Domaine Nordique Peisey-Vallandry", "type": "ski", "massif": "Tarentaise", "lat": 45.5245, "lon": 6.7953, "alt": 1558, "web": "https://www.peisey-vallandry.com/hiver/domaine-nordique-peisey-vallandry.html"},
 {"id": "osm-domaine-nordique-du-meygal", "name": "Domaine Nordique du Meygal", "type": "ski", "massif": "Massif Central", "lat": 45.0582, "lon": 4.1259, "alt": 1301, "web": "https://chaletdumeygal.wordpress.com/"},
 {"id": "osm-domaine-de-beldina", "name": "Domaine de Beldina", "type": "ski", "massif": "Belledonne", "lat": 45.239, "lon": 5.9925, "alt": 1393, "web": "http://www.skidefond-prapoutel.com/"},
 {"id": "osm-domaine-du-barioz", "name": "Domaine du Barioz", "type": "ski", "massif": "Oisans", "lat": 45.32, "lon": 6.0525, "alt": 1658},

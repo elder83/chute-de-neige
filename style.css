@@ -514,3 +514,19 @@ h2[tabindex]:focus { outline: none; }
 
 #alertsBanner .sess-alert { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 #alertsBanner .sa-list { gap: 4px 12px; }
+
+/* Suggestions de recherche */
+.search { position: relative; }
+.suggest {
+  position: absolute; left: -1px; right: -1px; top: calc(100% + 4px); z-index: 1200;
+  list-style: none; margin: 0; padding: 4px 0; background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); max-height: 60vh; overflow-y: auto;
+}
+.suggest li { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
+.suggest li:hover { background: var(--faint); }
+.suggest li > .i { color: var(--muted); width: 16px; height: 16px; flex: none; }
+.suggest li > .i + .i { margin-left: -6px; }
+.suggest .sg-txt { display: flex; flex-direction: column; min-width: 0; }
+.suggest .sg-txt b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest .sg-txt small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest .sg-all { color: var(--accent); font-weight: 600; justify-content: center; border-top: 1px solid var(--border); }

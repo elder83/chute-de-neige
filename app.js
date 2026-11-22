@@ -234,13 +234,23 @@ function allInRadius() {
     .filter((s) => s.dist <= state.radius || s.custom) // mes spots : toujours visibles
     .filter((s) => !isWind(s) || enabledSports(s).length); // disciplines affichées
 }
-const norm = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-function searchResults() { // recherche dans toute la France, sans limite de rayon
-  const words = norm(state.q).split(/\s+/).filter(Boolean);
+const norm = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+function matchScore(s, words) { // 0 = pas trouvé ; plus haut = meilleur
+  const name = norm(s.name), all = `${name} ${norm(s.massif || '')} ${norm(s.aka || '')}`, flat = all.replace(/ /g, '');
+  if (!words.every((w) => all.includes(w) || flat.includes(w))) return 0;
+  const q = words.join(' ');
+  return name.startsWith(q) ? 3 : name.includes(q) ? 2 : 1;
+}
+function searchResults(q = state.q) { // recherche dans toute la France, sans limite de rayon
+  const words = norm(q).split(' ').filter(Boolean);
+  if (!words.length) return [];
   return allSpots()
     .filter((s) => !isWind(s) || enabledSports(s).length)
-    .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
-    .filter((s) => { const t = norm(`${s.name} ${s.massif || ''}`); return words.every((w) => t.includes(w)); });
+    .map((s) => ({ s, sc: matchScore(s, words) }))
+    .filter((x) => x.sc)
+    .map(({ s, sc }) => ({ ...s, dist: haversine(state.loc, s), sc }))
+    .sort((a, b) => b.sc - a.sc || a.dist - b.dist);
 }
 function spotsInRadius() {
   if (state.q.trim()) return searchResults();
@@ -1224,22 +1234,63 @@ function bindUI() {
   $('#helpDlg').addEventListener('click', (e) => {
     if (e.target === $('#helpDlg') || e.target.closest('[data-close]')) { const d = $('#helpDlg'); d.close ? d.close() : d.removeAttribute('open'); }
   });
-  // recherche
-  const sq = $('#searchInput');
-  let sqTimer;
-  sq.oninput = () => {
-    clearTimeout(sqTimer);
+  // recherche : liste de suggestions sous la barre
+  const sq = $('#searchInput'), box = $('#suggest');
+  let sqTimer, geoSeq = 0;
+  const closeSuggest = () => { box.hidden = true; };
+  const showSuggest = async () => {
+    if (document.activeElement !== sq) return; // la recherche a été validée ou quittée
+    const q = sq.value.trim();
     $('#searchClear').hidden = !sq.value;
-    sqTimer = setTimeout(async () => {
-      state.q = sq.value;
-      render();
-      if (state.q.trim()) { // météo des résultats hors rayon
-        const missing = searchResults().filter((x) => !state.weather[x.id]).slice(0, 80);
-        if (missing.length) { try { await fetchWeather(missing); render(); } catch {} }
-      }
-    }, 250);
+    if (q.length < 2) { box.hidden = true; if (!q && state.q) { state.q = ''; render(); } return; }
+    const res = searchResults(q);
+    const rows = res.slice(0, 8).map((x) => `<li data-id="${esc(x.id)}">${typeIcons(x)}<span class="sg-txt"><b>${esc(x.name)}</b><small>${esc(x.massif || '')} · ${round(x.dist)} km</small></span></li>`);
+    if (res.length > 8) rows.push(`<li class="sg-all" data-all="1">Voir les ${res.length} résultats dans la liste</li>`);
+    box.innerHTML = rows.join('') + '<li class="sg-geo muted" hidden></li>';
+    box.hidden = false;
+    // pas assez de résultats : proposer un lieu (n'importe quelle station ou commune de France)
+    if (res.length < 3) {
+      const seq = ++geoSeq;
+      try {
+        const j = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=3&language=fr&format=json&countryCode=FR`)).json();
+        if (seq !== geoSeq || box.hidden) return;
+        const places = (j.results || []).filter((c) => !res.some((x) => haversine(x, { lat: c.latitude, lon: c.longitude }) < 3));
+        if (places.length) {
+          box.querySelector('.sg-geo')?.remove();
+          box.insertAdjacentHTML('beforeend', places.map((c) =>
+            `<li data-geo="${c.latitude},${c.longitude},${Math.round(c.elevation || 0)}" data-n="${esc(c.name)}" data-m="${esc([c.admin2, c.admin1].filter(Boolean).join(', '))}">${icon('i-pin')}<span class="sg-txt"><b>${esc(c.name)}</b><small>${esc([c.admin2, c.admin1].filter(Boolean).join(', '))} · voir la météo ici</small></span></li>`).join(''));
+        } else if (!res.length) box.innerHTML = '<li class="muted">Aucun spot, station ou lieu trouvé</li>';
+      } catch { if (!res.length) box.innerHTML = '<li class="muted">Aucun spot ni station trouvé</li>'; }
+    }
   };
-  $('#searchClear').onclick = () => { sq.value = ''; $('#searchClear').hidden = true; state.q = ''; render(); sq.focus(); };
+  sq.oninput = () => { clearTimeout(sqTimer); sqTimer = setTimeout(showSuggest, 180); };
+  sq.onfocus = () => { if (sq.value.trim().length >= 2) showSuggest(); };
+  sq.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(sqTimer); geoSeq++; applySearch(sq.value); closeSuggest(); sq.blur(); }
+    if (e.key === 'Escape') closeSuggest();
+  };
+  const applySearch = async (q) => { // filtre la liste avec la recherche
+    state.q = q; render(); window.scrollTo({ top: 0 });
+    const missing = searchResults().filter((x) => !state.weather[x.id]);
+    if (missing.length) { try { await fetchWeather(missing.slice(0, 200)); render(); } catch {} }
+  };
+  box.addEventListener('mousedown', (e) => e.preventDefault()); // garder le focus pendant le choix
+  box.addEventListener('click', async (e) => {
+    const li = e.target.closest('li'); if (!li) return;
+    if (li.dataset.all) { applySearch(sq.value); closeSuggest(); sq.blur(); return; }
+    closeSuggest(); sq.blur();
+    let spot;
+    if (li.dataset.id) spot = searchResults(sq.value).find((x) => x.id === li.dataset.id);
+    else if (li.dataset.geo) {
+      const [lat, lon, alt] = li.dataset.geo.split(',').map(Number);
+      spot = { id: `geo-${lat.toFixed(3)},${lon.toFixed(3)}`, name: li.dataset.n, massif: li.dataset.m, type: 'ski', lat, lon, alt, dist: haversine(state.loc, { lat, lon }) };
+    }
+    if (!spot) return;
+    if (!state.weather[spot.id] && !spot.id.startsWith('geo-')) { try { await fetchWeather([spot]); } catch {} }
+    openDetail(spot, 0);
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.search')) closeSuggest(); });
+  $('#searchClear').onclick = () => { sq.value = ''; $('#searchClear').hidden = true; closeSuggest(); if (state.q) { state.q = ''; render(); } sq.focus(); };
   const ddlg = $('#detailDlg');
   ddlg.addEventListener('click', (e) => {
     if (e.target === ddlg || e.target.closest('[data-close]')) { ddlg.close ? ddlg.close() : ddlg.removeAttribute('open'); }
