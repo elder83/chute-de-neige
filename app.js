@@ -1072,8 +1072,12 @@ function bindUI() {
   document.querySelectorAll('#discSel button').forEach((b) => {
     b.setAttribute('aria-pressed', !!state.disc[b.dataset.disc]);
     b.onclick = () => {
-      state.disc[b.dataset.disc] = !state.disc[b.dataset.disc]; store.set('disc', state.disc);
-      b.setAttribute('aria-pressed', state.disc[b.dataset.disc]); refresh();
+      const k = b.dataset.disc, on = !state.disc[k];
+      state.disc[k] = on; store.set('disc', state.disc);
+      b.setAttribute('aria-pressed', on);
+      const names = Object.keys(state.disc).filter((x) => state.disc[x]).map((x) => SESS_TYPE[x]);
+      toast(names.length ? `Disciplines affichées : ${names.join(', ')}` : 'Aucune discipline : spots mer & lacs masqués');
+      refresh();
     };
   });
   const nt = $('#ntfyTopic'); nt.value = state.ntfyTopic;

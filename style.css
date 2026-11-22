@@ -466,3 +466,9 @@ h2[tabindex]:focus { outline: none; }
 .sess > span[class*="t-"] .i { color: var(--tc); }
 .sess > span[class*="t-"] b { color: var(--tc); }
 .sess .sep { color: var(--muted); margin: 0 1px; }
+
+/* boutons à bascule dans les paramètres : état visible */
+#discSel button { position: relative; }
+#discSel button[aria-pressed=true] { background: var(--text); border-color: var(--text); color: var(--card); }
+#discSel button[aria-pressed=false] { color: var(--muted); border-style: dashed; }
+#discSel button[aria-pressed=false] .i { opacity: .5; }
