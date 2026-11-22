@@ -266,3 +266,63 @@ footer { font-size: 12px; padding-bottom: 28px; }
   transition: opacity .2s, transform .2s;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Prévisions vent dans la bande des jours */
+.day { cursor: pointer; }
+.day .wd { font-weight: 600; color: var(--text); display: flex; align-items: center; justify-content: center; gap: 1px; margin-top: 2px; }
+.day .wd .i { width: 11px; height: 11px; stroke-width: 2.2; }
+.day .wd.k-good { color: var(--good); }
+.day .wd.k-bad { color: var(--bad); }
+.day .wd.k-warn { color: var(--muted); font-weight: 500; }
+.day .gu { color: var(--muted); font-size: 10.5px; }
+.days-legend { font-size: 11.5px; margin: 6px 0 0; }
+.card { cursor: pointer; }
+.now .i[style] { width: 14px; height: 14px; }
+
+/* Segment (unité) */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.seg button { background: none; border: none; padding: 7px 16px; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed=true] { background: var(--text); color: var(--card); }
+
+/* Détail heure par heure */
+.sheet.tall { height: 90vh; display: none; flex-direction: column; }
+.sheet.tall[open] { display: flex; }
+.sheet.tall .sheet-body { flex: 1; max-height: none; padding-top: 10px; }
+.sheet-head .title { min-width: 0; }
+.sheet-head .title h2 { display: flex; align-items: center; gap: 6px; }
+.sheet-head .title h2 .i { width: 16px; height: 16px; color: var(--muted); }
+.d-days { display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px solid var(--border); scrollbar-width: none; flex: none; }
+.d-days::-webkit-scrollbar { display: none; }
+.d-days button {
+  flex: none; background: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 13px;
+  text-transform: capitalize; position: relative;
+}
+.d-days button[aria-pressed=true] { background: var(--text); color: var(--card); border-color: var(--text); }
+.d-days button.has-sess::after { content: ""; position: absolute; top: 3px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+.d-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+.d-sum > div { background: var(--faint); border-radius: 10px; padding: 7px 8px; display: flex; flex-direction: column; font-size: 11.5px; }
+.d-sum b { font-size: 15px; font-weight: 600; margin-top: 1px; }
+.d-kite { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13.5px; margin: 0 0 10px; }
+.d-kite .i { color: var(--muted); }
+.d-kite.ok .i { color: var(--good); }
+.hours { font-size: 13.5px; }
+.hr { display: grid; grid-template-columns: 34px 22px 40px 1fr 34px 38px; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.hr.head { font-size: 11px; border-bottom: none; padding-bottom: 2px; position: sticky; top: -10px; background: var(--card); z-index: 1; }
+.hr.night { opacity: .55; }
+.hr.now { background: var(--faint); border-radius: 8px; }
+.hr .wx { width: 19px; height: 19px; }
+.hr > span:nth-child(5), .hr > span:nth-child(6) { text-align: right; }
+.hr .sn { color: var(--snow); font-weight: 600; }
+.wcell { position: relative; display: flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 6px; overflow: hidden; }
+.wcell .bar { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--muted) 18%, transparent); z-index: 0; }
+.wcell > *:not(.bar) { position: relative; z-index: 1; }
+.wcell .i { width: 12px; height: 12px; stroke-width: 2.2; }
+.wcell small { color: var(--muted); font-size: 11px; }
+.wcell.k-good .bar { background: color-mix(in srgb, var(--good) 30%, transparent); }
+.wcell.k-warn .bar { background: color-mix(in srgb, var(--warn) 22%, transparent); }
+.wcell.k-bad .bar { background: color-mix(in srgb, var(--bad) 28%, transparent); }
+.wcell.k-nosnow .bar { background: color-mix(in srgb, var(--muted) 22%, transparent); }
+@media (max-width: 380px) { .d-sum { grid-template-columns: repeat(2, 1fr); } }
+
+button:focus:not(:focus-visible) { outline: none; }
+h2[tabindex]:focus { outline: none; }

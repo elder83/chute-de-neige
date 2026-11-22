@@ -29,6 +29,7 @@ const state = {
   threshold: store.get('threshold', 20),
   alertAll: store.get('alertAll', false),
   kite: { ...KITE_DEFAULT, ...store.get('kite', {}) },
+  unit: store.get('unit', 'kn'),          // unité du vent : 'kn' (nœuds) ou 'kmh'
   mapKite: store.get('mapKite', true),
   mapSki: store.get('mapSki', true),
   view: 'list',
@@ -60,6 +61,9 @@ function wxId(code) {
   return 'w-storm';
 }
 const isRain = (c) => (c >= 51 && c <= 67) || (c >= 80 && c <= 82);
+const KN = 1.852;
+const wv = (kmh) => kmh == null ? '–' : Math.round(state.unit === 'kn' ? kmh / KN : kmh); // vitesse affichée
+const U = () => (state.unit === 'kn' ? 'nds' : 'km/h');
 const round = (v, d = 0) => v == null ? '–' : Number(v).toFixed(d);
 const sum = (arr) => arr.reduce((a, b) => a + (b || 0), 0);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -107,7 +111,7 @@ function sessionsFor(s, w) {
       // Kite : il faut de la neige au sol (fraîche ou non) et du vent dans la bonne plage
       const k = state.kite, snow = snowDepth(w, i);
       if (snow >= k.minSnow && wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax) {
-        out.push({ i, kind: 'kite', far, txt: `${round(wind)} km/h ${dirName(d.wind_direction_10m_dominant[i])} · ${round(snow)} cm` });
+        out.push({ i, kind: 'kite', far, txt: `${wv(wind)} ${U()} ${dirName(d.wind_direction_10m_dominant[i])} · ${round(snow)} cm` });
       }
     }
     if (isSki(s)) {
@@ -288,7 +292,7 @@ function renderCard(s, alerting) {
   const kr = isKite(s) ? kiteRating(c.wind_speed_10m, c.wind_gusts_10m) : null;
   node.querySelector('.now').innerHTML = `
     <span>${icon(wxId(c.weather_code))}<b>${round(c.temperature_2m)}°</b></span>
-    <span title="Vent actuel, rafales ${round(c.wind_gusts_10m)} km/h">${kr ? `<i class="dot ${kr.cls}" title="${kr.txt}"></i>` : icon('i-wind')}<b>${round(c.wind_speed_10m)}</b> km/h ${arrow(c.wind_direction_10m)}${dirName(c.wind_direction_10m)}</span>
+    <span title="Vent actuel">${kr ? `<i class="dot ${kr.cls}" title="${kr.txt}"></i>` : icon('i-wind')}<b>${wv(c.wind_speed_10m)}</b> ${U()} ${arrow(c.wind_direction_10m)}${dirName(c.wind_direction_10m)} <span class="muted">raf. ${wv(c.wind_gusts_10m)}</span></span>
     <span title="Neige au sol (estimée)">${icon('i-mountain')}<b>${c.snow_depth != null ? round(c.snow_depth * 100) : '–'}</b> cm</span>
     <span title="Neige prévue sur 3 jours (48 h passées : ${round(sm.past48)} cm)">${icon('i-snow')}<b class="plus">+${round(sm.next72)}</b> cm / 3 j</span>`;
 
@@ -305,15 +309,23 @@ function renderCard(s, alerting) {
   for (let i = T0; i < d.time.length; i++) {
     const sn = d.snowfall_sum[i] || 0;
     const cls = ['day', i === T0 && 'today', byDay[i] && `s-${byDay[i]}`, i - T0 >= 7 && 'far'].filter(Boolean).join(' ');
-    html += `<div class="${cls}" title="${dayDate(w, i).toLocaleDateString('fr-FR')} · vent max ${round(d.wind_speed_10m_max[i])} km/h ${dirName(d.wind_direction_10m_dominant[i])}, rafales ${round(d.wind_gusts_10m_max[i])} km/h">
+    const kd = isKite(s) ? kiteRating(d.wind_speed_10m_max[i], d.wind_gusts_10m_max[i]) : null;
+    html += `<div class="${cls}" data-day="${i}" title="${dayDate(w, i).toLocaleDateString('fr-FR')} · vent max ${wv(d.wind_speed_10m_max[i])} ${U()} ${dirName(d.wind_direction_10m_dominant[i])}, rafales ${wv(d.wind_gusts_10m_max[i])} ${U()} — toucher pour le détail heure par heure">
       <div class="d">${dayLabel(w, i)}</div>
       ${icon(wxId(d.weather_code[i]), 'i wx')}
       <div class="t">${round(d.temperature_2m_min[i])}/${round(d.temperature_2m_max[i])}°</div>
       <div class="sn${sn < 0.5 ? ' zero' : ''}">${sn < 0.5 ? '0' : round(sn)} cm</div>
-      <div class="wd">${round(d.wind_speed_10m_max[i])}</div>
+      <div class="wd${kd ? ' k-' + kd.cls : ''}">${arrow(d.wind_direction_10m_dominant[i])}${wv(d.wind_speed_10m_max[i])}</div>
+      <div class="gu">raf ${wv(d.wind_gusts_10m_max[i])}</div>
     </div>`;
   }
   node.querySelector('.days').innerHTML = html;
+  node.querySelector('.days').insertAdjacentHTML('afterend', `<p class="days-legend muted">Vent max et rafales en ${U()} · touche la fiche pour le détail heure par heure</p>`);
+  node.addEventListener('click', (e) => {
+    if (e.target.closest('a, button')) return;
+    const day = e.target.closest('[data-day]');
+    openDetail(s, day ? +day.dataset.day - T0 : 0);
+  });
   return node;
 }
 
@@ -370,9 +382,9 @@ function renderMap(alertIds) {
     const div = document.createElement('div');
     const b = document.createElement('b'); b.textContent = s.name; div.append(b);
     div.insertAdjacentHTML('beforeend', `<br>${kite ? 'Spot snowkite' : 'Station'} · ${s.alt} m · ${round(s.dist)} km` +
-      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${round(w.current.wind_speed_10m)} km/h · ${round(snowDepth(w, T0))} cm au sol<br>+${round(next72)} cm prévus sur 3 j` : '') +
+      (w ? `<br>${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()} · ${round(snowDepth(w, T0))} cm au sol<br>+${round(next72)} cm prévus sur 3 j` : '') +
       (ses.length ? `<br>${ses.length} session${ses.length > 1 ? 's' : ''} · prochaine ${dayLong(w, ses[0].i)}` : '') +
-      `<br><a href="#" data-goto="${esc(s.id)}">Voir la fiche</a>`);
+      `<br><a href="#" data-goto="${esc(s.id)}">Détail heure par heure</a>`);
     L.marker([s.lat, s.lon], {
       icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
       zIndexOffset: kite ? 500 : 0,
@@ -452,6 +464,126 @@ async function askNotif() {
   $('#notifState').textContent = notifStateText();
 }
 
+/* ---------- réglages kite (affichés dans l'unité choisie) ---------- */
+const SLIDERS = { // bornes en km/h ; converties pour l'affichage
+  windMin: [5, 40], windMax: [15, 75], gustMax: [20, 95],
+};
+function setupKiteSliders() {
+  for (const k of Object.keys(KITE_DEFAULT)) {
+    const el = $(`#k-${k}`), out = $(`#k-${k}-v`), unit = $(`#k-${k}-u`);
+    const isWind = k !== 'minSnow';
+    const toUI = (v) => (isWind ? wv(v) : v), fromUI = (v) => (isWind && state.unit === 'kn' ? Math.round(v * KN) : v);
+    if (isWind) { el.min = toUI(SLIDERS[k][0]); el.max = toUI(SLIDERS[k][1]); el.step = 1; unit.textContent = U(); }
+    el.value = toUI(state.kite[k]); out.textContent = el.value;
+    el.oninput = () => { out.textContent = el.value; };
+    el.onchange = () => {
+      state.kite[k] = fromUI(+el.value);
+      if (state.kite.windMin > state.kite.windMax) state.kite.windMax = state.kite.windMin;
+      store.set('kite', state.kite); setupKiteSliders(); render();
+      if (detail.spot) renderDetail();
+    };
+  }
+}
+
+/* ---------- détail heure par heure ---------- */
+const detail = { spot: null, day: 0, data: null };
+const hourlyCache = {};
+async function fetchHourly(s) {
+  const c = hourlyCache[s.id];
+  if (c && Date.now() - c.t < CACHE_MIN * 60000) return c.h;
+  const p = new URLSearchParams({
+    latitude: s.lat, longitude: s.lon, elevation: s.alt,
+    hourly: 'temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,snowfall,snow_depth',
+    timezone: 'Europe/Paris', forecast_days: String(DAYS),
+  });
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+  if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
+  const h = (await r.json()).hourly;
+  hourlyCache[s.id] = { t: Date.now(), h };
+  return h;
+}
+async function openDetail(s, day = 0) {
+  detail.spot = s; detail.day = day; detail.data = null;
+  const dlg = $('#detailDlg');
+  $('#dTitle').innerHTML = typeIcons(s); $('#dTitle').append(s.name);
+  $('#dMeta').textContent = `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
+  $('#dBody').innerHTML = '<p class="muted small">Chargement des prévisions horaires…</p>';
+  $('#dDays').innerHTML = '';
+  if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
+  try {
+    detail.data = await fetchHourly(s);
+    if (detail.spot === s) renderDetail();
+  } catch (e) {
+    console.error(e);
+    $('#dBody').innerHTML = '<p class="muted small">Prévisions horaires indisponibles (connexion ?).</p>';
+  }
+}
+function hourKiteClass(s, wind, gust, depth) {
+  if (!isKite(s)) return '';
+  const k = state.kite;
+  if (depth != null && depth * 100 < k.minSnow) return 'k-nosnow';
+  if (wind < k.windMin) return 'k-warn';
+  if (wind > k.windMax || gust > k.gustMax) return 'k-bad';
+  return 'k-good';
+}
+function renderDetail() {
+  const s = detail.spot, h = detail.data, w = state.weather[s.id];
+  if (!h) return;
+  const days = [...new Set(h.time.map((t) => t.slice(0, 10)))];
+  const sess = w ? sessionsFor(s, w) : [];
+  const sessDays = new Set(sess.map((x) => x.i - T0));
+  $('#dDays').innerHTML = days.map((d, i) => {
+    const dt = new Date(d + 'T12:00');
+    const lbl = i === 0 ? 'Auj.' : i === 1 ? 'Dem.' : dt.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', '');
+    return `<button data-i="${i}" aria-pressed="${i === detail.day}" class="${sessDays.has(i) ? 'has-sess' : ''}">${lbl}</button>`;
+  }).join('');
+  $('#dDays').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { detail.day = +b.dataset.i; renderDetail(); };
+  });
+  $('#dDays').querySelector('[aria-pressed=true]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+
+  const day = days[detail.day];
+  const idx = h.time.map((t, i) => (t.startsWith(day) ? i : -1)).filter((i) => i >= 0);
+  const nowH = new Date().getHours();
+  const maxW = Math.max(30, ...idx.map((i) => h.wind_gusts_10m[i] || 0));
+  // résumé de la journée (heures de jour 9h-17h)
+  const dayIdx = idx.filter((i) => { const hr = +h.time[i].slice(11, 13); return hr >= 9 && hr <= 17; });
+  const avg = dayIdx.length ? dayIdx.reduce((a, i) => a + h.wind_speed_10m[i], 0) / dayIdx.length : null;
+  const gmax = Math.max(...idx.map((i) => h.wind_gusts_10m[i] || 0));
+  const depth = h.snow_depth[idx[12]];
+  const snowDay = idx.reduce((a, i) => a + (h.snowfall[i] || 0), 0);
+  const goodHours = idx.filter((i) => hourKiteClass(s, h.wind_speed_10m[i], h.wind_gusts_10m[i], h.snow_depth[i]) === 'k-good'
+    && +h.time[i].slice(11, 13) >= 8 && +h.time[i].slice(11, 13) <= 18).length;
+  $('#dBody').innerHTML = `
+    <div class="d-sum">
+      <div><span class="muted">Vent 9h–17h</span><b>${avg == null ? '–' : wv(avg)} ${U()}</b></div>
+      <div><span class="muted">Rafales max</span><b>${wv(gmax)} ${U()}</b></div>
+      <div><span class="muted">Neige au sol</span><b>${depth == null ? '–' : round(depth * 100)} cm</b></div>
+      <div><span class="muted">Chute du jour</span><b>${round(snowDay)} cm</b></div>
+    </div>
+    ${isKite(s) ? `<p class="d-kite ${goodHours ? 'ok' : ''}">${icon('i-kite')}${goodHours ? `${goodHours} h navigables entre 8h et 18h` : 'Pas de créneau kite entre 8h et 18h'} <span class="muted">(${wv(state.kite.windMin)}–${wv(state.kite.windMax)} ${U()}, raf. ≤ ${wv(state.kite.gustMax)}, neige ≥ ${state.kite.minSnow} cm)</span></p>` : ''}
+    <div class="hours">
+      <div class="hr head muted"><span>h</span><span></span><span>°C</span><span>Vent ${U()}</span><span>Raf.</span><span>Neige</span></div>
+      ${idx.map((i) => {
+        const hr = +h.time[i].slice(11, 13);
+        const ws = h.wind_speed_10m[i], gu = h.wind_gusts_10m[i], sn = h.snowfall[i] || 0;
+        const kc = hourKiteClass(s, ws, gu, h.snow_depth[i]);
+        const night = hr < 7 || hr > 19;
+        return `<div class="hr${night ? ' night' : ''}${detail.day === 0 && hr === nowH ? ' now' : ''}">
+          <span>${hr}h</span>
+          ${icon(wxId(h.weather_code[i]), 'i wx')}
+          <span>${round(h.temperature_2m[i])}°</span>
+          <span class="wcell ${kc}"><i class="bar" style="width:${Math.min(100, (ws / maxW) * 100)}%"></i>${arrow(h.wind_direction_10m[i])}<b>${wv(ws)}</b> <small>${dirName(h.wind_direction_10m[i])}</small></span>
+          <span class="muted">${wv(gu)}</span>
+          <span class="${sn >= 0.1 ? 'sn' : 'muted'}">${sn >= 0.1 ? round(sn, 1) : '·'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <p class="muted small">${isKite(s) ? 'Barre verte : vent dans ta plage kite · orange : trop faible · rouge : trop fort ou rafales · grise : pas assez de neige. ' : ''}Prévision Open-Meteo à ${s.alt} m${detail.day >= 7 ? ' — au-delà de 7 jours, indicative' : ''}.</p>`;
+  // aujourd'hui : on garde le résumé en haut, l'heure actuelle est surlignée
+  $('#dBody').scrollTop = 0;
+}
+
 /* ---------- partage ---------- */
 let toastTimer;
 function toast(msg) {
@@ -513,8 +645,7 @@ function bindUI() {
   });
   $('#kiteReset').onclick = () => {
     state.kite = { ...KITE_DEFAULT }; store.set('kite', state.kite);
-    for (const k of Object.keys(KITE_DEFAULT)) { $(`#k-${k}`).value = state.kite[k]; $(`#k-${k}-v`).textContent = state.kite[k]; }
-    render();
+    setupKiteSliders(); render();
   };
   const thr = $('#threshold');
   thr.value = state.threshold; $('#thrVal').textContent = state.threshold;
@@ -541,21 +672,26 @@ function bindUI() {
     const el = $(btn); el.setAttribute('aria-pressed', state[key]);
     el.onclick = () => { state[key] = !state[key]; store.set(key, state[key]); el.setAttribute('aria-pressed', state[key]); render(); };
   }
-  for (const k of Object.keys(KITE_DEFAULT)) {
-    const el = $(`#k-${k}`), out = $(`#k-${k}-v`);
-    el.value = state.kite[k]; out.textContent = state.kite[k];
-    el.oninput = () => { out.textContent = el.value; };
-    el.onchange = () => {
-      state.kite[k] = +el.value;
-      if (state.kite.windMin > state.kite.windMax) { state.kite.windMax = state.kite.windMin; $('#k-windMax').value = state.kite.windMax; $('#k-windMax-v').textContent = state.kite.windMax; }
-      store.set('kite', state.kite); render();
+  setupKiteSliders();
+  document.querySelectorAll('#unitSel button').forEach((b) => {
+    b.setAttribute('aria-pressed', b.dataset.unit === state.unit);
+    b.onclick = () => {
+      state.unit = b.dataset.unit; store.set('unit', state.unit);
+      document.querySelectorAll('#unitSel button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+      setupKiteSliders(); render();
+      if (detail.spot) renderDetail();
     };
-  }
+  });
 
   $('#btnGeo').onclick = geolocate;
   $('#locInput').oninput = (e) => searchCity(e.target.value);
   $('#btnRefresh').onclick = () => refresh(true);
   $('#btnShare').onclick = shareApp;
+  const ddlg = $('#detailDlg');
+  ddlg.addEventListener('click', (e) => {
+    if (e.target === ddlg || e.target.closest('[data-close]')) { ddlg.close ? ddlg.close() : ddlg.removeAttribute('open'); }
+  });
+  ddlg.addEventListener('close', () => { detail.spot = null; });
 
   document.querySelectorAll('.tabs button').forEach((b) => {
     b.onclick = () => {
@@ -571,7 +707,12 @@ function bindUI() {
     e.preventDefault(); goTo(a.dataset.goto);
   };
   $('#alertsBanner').addEventListener('click', goto);
-  $('#map').addEventListener('click', goto);
+  $('#map').addEventListener('click', (e) => { // depuis la carte : ouvrir directement le détail
+    const a = e.target.closest('[data-goto]'); if (!a) return;
+    e.preventDefault();
+    const sp = allInRadius().find((x) => x.id === a.dataset.goto);
+    if (sp) openDetail(sp, 0);
+  });
 }
 
 async function init() {

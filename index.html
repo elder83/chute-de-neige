@@ -84,7 +84,7 @@
 
   <dialog id="settingsDlg" class="sheet" aria-labelledby="dlgTitle">
     <div class="sheet-head">
-      <h2 id="dlgTitle">Paramètres</h2>
+      <h2 id="dlgTitle" tabindex="-1" autofocus>Paramètres</h2>
       <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
     </div>
     <div class="sheet-body">
@@ -102,12 +102,20 @@
       </section>
 
       <section>
+        <h3>Unité du vent</h3>
+        <div class="seg" id="unitSel">
+          <button data-unit="kn">Nœuds</button>
+          <button data-unit="kmh">km/h</button>
+        </div>
+      </section>
+
+      <section>
         <h3>Session snowkite</h3>
         <p class="muted small">Neige au sol (fraîche ou non) + vent dans ta plage.</p>
-        <label class="range"><span>Vent mini <b><output id="k-windMin-v"></output> km/h</b></span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
-        <label class="range"><span>Vent maxi <b><output id="k-windMax-v"></output> km/h</b></span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
-        <label class="range"><span>Rafales maxi <b><output id="k-gustMax-v"></output> km/h</b></span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
-        <label class="range"><span>Neige au sol mini <b><output id="k-minSnow-v"></output> cm</b></span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
+        <label class="range"><span>Vent mini <b><output id="k-windMin-v"></output> <span id="k-windMin-u"></span></b></span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
+        <label class="range"><span>Vent maxi <b><output id="k-windMax-v"></output> <span id="k-windMax-u"></span></b></span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
+        <label class="range"><span>Rafales maxi <b><output id="k-gustMax-v"></output> <span id="k-gustMax-u"></span></b></span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
+        <label class="range"><span>Neige au sol mini <b><output id="k-minSnow-v"></output> <span id="k-minSnow-u">cm</span></b></span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
         <button id="kiteReset" class="link small">Valeurs par défaut</button>
       </section>
 
@@ -182,6 +190,18 @@
       <div class="links"></div>
     </article>
   </template>
+
+  <dialog id="detailDlg" class="sheet tall" aria-labelledby="dTitle">
+    <div class="sheet-head">
+      <div class="title">
+        <h2 id="dTitle" tabindex="-1" autofocus></h2>
+        <div id="dMeta" class="muted small"></div>
+      </div>
+      <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
+    </div>
+    <div id="dDays" class="d-days"></div>
+    <div id="dBody" class="sheet-body"></div>
+  </dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>
 
