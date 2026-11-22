@@ -21,17 +21,14 @@
     "montcenis",
     "vars-col",
     "isola",
-    "praloup"
+    "praloup",
+    "e-almanarre",
+    "e-ceinturon"
   ],
-  "my_spots": [
-    {
-      "id": "u-almanarre",
-      "name": "Almanarre (Hyères)",
-      "type": "wind",
-      "sport": "kitesea",
-      "lat": 43.0605,
-      "lon": 6.1307,
-      "alt": 0
-    }
+  "my_spots": [],
+  "disciplines": [
+    "kitesea",
+    "wing",
+    "windsurf"
   ]
 }

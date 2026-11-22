@@ -37,6 +37,9 @@
       <symbol id="i-mountain" viewBox="0 0 24 24"><path d="m2 20 7-12 4 6 3-4 6 10z"/></symbol>
       <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
       <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+      <symbol id="i-snowkite" viewBox="0 0 24 24"><path d="M3 7c5-5.5 13-5.5 18 0M3 7l8 11M21 7l-6 8"/><path d="M18 15v6M15.4 16.5l5.2 3M15.4 19.5l5.2-3" stroke-width="1.4"/></symbol>
+      <symbol id="i-kitesea" viewBox="0 0 24 24"><path d="M3 6c5-5 13-5 18 0M3 6l9 11 9-11"/><path d="M2 20c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/></symbol>
+      <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 9c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M2 15c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/></symbol>
       <symbol id="i-wing" viewBox="0 0 24 24"><path d="M3 15c2-7 9-11 18-9-6 1-10 5-12 12zM9 18l-1 3M12 11l-3 7"/></symbol>
       <symbol id="i-windsurf" viewBox="0 0 24 24"><path d="M12 3v15M12 3c4 3 6 8 6 13h-6M3 20h18"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
@@ -68,8 +71,9 @@
     </button>
     <div class="chips" id="typeFilter">
       <button data-type="all">Tout</button>
-      <button data-type="kite"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
+      <button data-type="kite"><svg class="i"><use href="#i-snowkite"/></svg>Snowkite</button>
       <button data-type="ski"><svg class="i"><use href="#i-ski"/></svg>Ski</button>
+      <button data-type="water"><svg class="i"><use href="#i-wave"/></svg>Mer &amp; lacs</button>
       <button data-type="fav"><svg class="i"><use href="#i-star"/></svg>Favoris</button>
       <button data-type="mine"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
     </div>
@@ -114,6 +118,16 @@
       </section>
 
       <section>
+        <h3>Disciplines affichées</h3>
+        <p class="muted small">Spots mer &amp; lacs : n'affiche que les disciplines choisies (sessions et alertes aussi).</p>
+        <div class="chips" id="discSel">
+          <button data-disc="kitesea"><svg class="i"><use href="#i-kitesea"/></svg>Kite</button>
+          <button data-disc="wing"><svg class="i"><use href="#i-wing"/></svg>Wing</button>
+          <button data-disc="windsurf"><svg class="i"><use href="#i-windsurf"/></svg>Planche</button>
+        </div>
+      </section>
+
+      <section>
         <h3>Mes plages de vent</h3>
         <div class="seg seg-wrap" id="sportSel">
           <button data-sport="kite">Snowkite</button>
@@ -131,7 +145,7 @@
 
       <section>
         <h3>Mes spots</h3>
-        <p class="muted small">Ajoute tes spots de kite, wing ou planche (mer, lac) ou un spot de snowkite perso. Ils apparaissent toujours, quel que soit le rayon.</p>
+        <p class="muted small">Un spot manque dans la liste ? Ajoute-le ici (kite, wing, planche ou snowkite perso). Ils apparaissent toujours, quel que soit le rayon.</p>
         <ul id="mySpotsList" class="my-list"></ul>
         <div class="add-spot">
           <input id="msName" type="text" placeholder="Nom du spot (ex : Almanarre)" autocomplete="off">
@@ -150,7 +164,6 @@
             <button id="msPick" class="btn ghost"><svg class="i"><use href="#i-map"/></svg> Placer sur la carte</button>
             <button id="msHere" class="btn ghost"><svg class="i"><use href="#i-locate"/></svg> Ma position</button>
           </div>
-          <button id="msAlmanarre" class="link small">Ajouter l'Almanarre (Hyères) en exemple</button>
         </div>
       </section>
 
@@ -193,8 +206,9 @@
     <div id="list"></div>
     <div id="mapWrap" hidden>
       <div class="map-bar">
-        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
+        <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-snowkite"/></svg>Snowkite</button>
         <button id="mapSki" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-ski"/></svg>Stations</button>
+        <button id="mapWater" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-wave"/></svg>Mer &amp; lacs</button>
         <button id="mapMine" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
         <button id="mapGood" class="toggle" aria-pressed="false" title="N'afficher que les spots où mes conditions sont réunies"><svg class="i"><use href="#i-star"/></svg>Bonnes conditions</button>
       </div>
@@ -236,6 +250,7 @@
         <h2 id="dTitle" tabindex="-1" autofocus></h2>
         <div id="dMeta" class="muted small"></div>
       </div>
+      <button id="dMapBtn" class="icon-btn" title="Voir sur la carte" aria-label="Voir sur la carte"><svg class="i"><use href="#i-map"/></svg></button>
       <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
     </div>
     <div class="d-tabs"><div class="seg" id="dTabs">
@@ -244,6 +259,18 @@
     </div></div>
     <div id="dDays" class="d-days"></div>
     <div id="dBody" class="sheet-body"></div>
+  </dialog>
+
+  <dialog id="mapDlg" class="sheet tall" aria-labelledby="mapDlgTitle">
+    <div class="sheet-head">
+      <div class="title">
+        <h2 id="mapDlgTitle" tabindex="-1" autofocus></h2>
+        <div id="mapDlgHint" class="muted small"></div>
+      </div>
+      <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
+    </div>
+    <div id="pickMap"></div>
+    <div class="map-dlg-foot"><button id="mapDlgOk" class="btn" hidden>Valider l'emplacement</button></div>
   </dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>

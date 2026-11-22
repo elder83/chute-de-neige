@@ -1,6 +1,6 @@
 // Service worker : appli utilisable hors ligne (dernières données en cache)
-const CACHE = 'chute-de-neige-v11';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'spots.json', 'spots-osm.json', 'manifest.webmanifest', 'icons/icon-192.png',
+const CACHE = 'chute-de-neige-v12';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'spots.json', 'spots-osm.json', 'spots-eau.json', 'manifest.webmanifest', 'icons/icon-192.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css'];
 
 self.addEventListener('install', (e) => {

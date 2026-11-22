@@ -109,10 +109,12 @@ def session_alerts(cfg, spots, state):
         "hourly": "snow_depth", "forecast_days": horizon, "past_days": PAST,
     })
     hits = []
+    disc = set(cfg.get("disciplines", ["kitesea", "wing", "windsurf"]))
     for s, w in zip(targets, data):
         typ = s.get("type")
         sport = s.get("sport") or "kite"
         r = ranges.get(sport, DEFAULT_RANGES["kitesea"])
+        wsports = [x for x in (s.get("sports") or [s.get("sport")]) if x in disc] if typ == "wind" else ["kite"]
         d, h = w["daily"], w.get("hourly", {})
         sf = lambda i: d["snowfall_sum"][i] or 0
         for i in range(PAST, len(d["time"])):
@@ -124,17 +126,18 @@ def session_alerts(cfg, spots, state):
             dirn = DIRS[round((d["wind_direction_10m_dominant"][i] or 0) / 45) % 8]
             # vent : snowkite (spots kite) ou kite/wing/planche (mes spots)
             if typ in ("kite", "both", "wind"):
-                ok = r["windMin"] <= wind <= r["windMax"] and gust <= r["gustMax"] and code < 95
-                if ok and typ != "wind":
-                    try:
-                        depth = h["snow_depth"][h["time"].index(f"{day}T12:00")] or 0
-                    except (KeyError, ValueError):
-                        depth = 0
-                    ok = depth * 100 >= r.get("minSnow", 10)
-                if ok:
-                    kind = sport if typ == "wind" else "kite"
-                    hits.append((s, day, kind, f"{wind / KN:.0f} nds {dirn}, raf. {gust / KN:.0f}"))
-                    print(f"Session {LABEL[kind]} {s['name']} {day} : {wind / KN:.0f} nds")
+                for kind in wsports:
+                    r = ranges.get(kind, DEFAULT_RANGES["kitesea"])
+                    ok = r["windMin"] <= wind <= r["windMax"] and gust <= r["gustMax"] and code < 95
+                    if ok and kind == "kite":
+                        try:
+                            depth = h["snow_depth"][h["time"].index(f"{day}T12:00")] or 0
+                        except (KeyError, ValueError):
+                            depth = 0
+                        ok = depth * 100 >= r.get("minSnow", 10)
+                    if ok:
+                        hits.append((s, day, kind, f"{wind / KN:.0f} nds {dirn}, raf. {gust / KN:.0f}"))
+                        print(f"Session {LABEL[kind]} {s['name']} {day} : {wind / KN:.0f} nds")
             # poudreuse : ≥ 10 cm les 2 jours d'avant, puis journée calme (stations)
             if typ in ("ski", "both"):
                 fresh = sf(i - 1) + sf(i - 2)
@@ -158,9 +161,10 @@ def session_alerts(cfg, spots, state):
 def main():
     cfg = json.loads((ROOT / "alerts-config.json").read_text())
     spots = json.loads((ROOT / "spots.json").read_text())
-    osm = ROOT / "spots-osm.json"
-    if osm.exists():
-        spots += json.loads(osm.read_text())
+    for extra in ("spots-osm.json", "spots-eau.json"):
+        f = ROOT / extra
+        if f.exists():
+            spots += json.loads(f.read_text())
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     snow_alerts(cfg, spots, state)
     session_alerts(cfg, spots, state)

@@ -4,6 +4,9 @@ Petite appli web (installable sur téléphone) pour suivre les **spots de snowki
 
 - 📍 position par GPS ou par ville (Hyères par défaut) + **rayon réglable** (50 → 1200 km)
 - 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **14 jours** (neige, températures, vent)
+- 🌊 **catalogue mer & lacs** (≈ 45 spots de kite, wing et planche : Almanarre, Leucate, Gruissan, Carro, Wissant, Monteynard…) et choix des disciplines affichées
+- 🎨 un **logo et une couleur par type de session** : Snowkite, Ski poudreuse, Kite, Wing, Planche
+- 🗺️ **carte en fenêtre** pour placer un spot ou voir où il se trouve
 - 🌬️ **mes spots** (kite mer/lac, wing, planche à voile, snowkite perso) avec une plage de vent par sport
 - 📊 **grille de vent multi-modèles façon Windguru** (AROME, ARPEGE, ICON-EU, ECMWF, GFS) en touchant une fiche ou un marqueur
 - 🔔 **alerte « session possible »** (Snowkite, Ski poudreuse, Kite, Wing, Planche) sur les favoris, les spots avec cloche et mes spots (dans l'appli et via ntfy)
@@ -41,6 +44,7 @@ Pour tester en local : `python3 -m http.server` puis ouvrir http://localhost:800
 ## Liste des stations
 
 - `spots.json` : spots de snowkite et stations choisis à la main (modifiable).
+- `spots-eau.json` : spots de kite, wing et planche à voile (mer et lacs).
 - `spots-osm.json` : toutes les autres stations de France, générées depuis OpenStreetMap par le workflow **Mise à jour des stations** (onglet Actions → Run workflow).
 
 ## Ajouter / modifier un spot

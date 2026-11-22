@@ -11,8 +11,8 @@ const KITE_DEFAULT = { windMin: 15, windMax: 40, gustMax: 55, minSnow: 10 }; // 
 const SKI = { freshMin: 10, maxSnowfall: 3, windMax: 45 };
 /* Sports de vent : plages par défaut en km/h (≈ nœuds × 1,852) */
 const SPORTS = {
-  kite:     { label: 'Snowkite',        icon: 'i-kite',     def: KITE_DEFAULT },
-  kitesea:  { label: 'Kite (mer/lac)',  icon: 'i-kite',     def: { windMin: 22, windMax: 56, gustMax: 70 } }, // 12–30 nds
+  kite:     { label: 'Snowkite',        icon: 'i-snowkite', def: KITE_DEFAULT },
+  kitesea:  { label: 'Kite (mer/lac)',  icon: 'i-kitesea',  def: { windMin: 22, windMax: 56, gustMax: 70 } }, // 12–30 nds
   wing:     { label: 'Wing',            icon: 'i-wing',     def: { windMin: 22, windMax: 52, gustMax: 65 } }, // 12–28 nds
   windsurf: { label: 'Planche à voile', icon: 'i-windsurf', def: { windMin: 26, windMax: 65, gustMax: 78 } }, // 14–35 nds
 };
@@ -40,12 +40,14 @@ const state = {
     .map(([k, v]) => [k, { ...v.def, ...(store.get('ranges', {})[k] || {}) }])),
   sportTab: 'kite',                       // sport affiché dans les réglages
   mySpots: store.get('mySpots', []),      // spots ajoutés par l'utilisateur
+  disc: { kitesea: true, wing: true, windsurf: true, ...store.get('disc', {}) }, // disciplines affichées
   sessionAlert: store.get('sessionAlert', true),
   sessionHorizon: store.get('sessionHorizon', 3),
   unit: store.get('unit', 'kn'),          // unité du vent : 'kn' (nœuds) ou 'kmh'
   mapKite: store.get('mapKite', true),
   mapSki: store.get('mapSki', true),
   mapMine: store.get('mapMine', true),
+  mapWater: store.get('mapWater', true),
   mapDay: 'all',
   mapGoodOnly: store.get('mapGoodOnly', false),
   view: 'list',
@@ -89,8 +91,11 @@ const dayLabel = (w, i) => i === T0 ? 'Auj.' : i === T0 + 1 ? 'Dem.'
 const dayLong = (w, i) => i === T0 ? "aujourd'hui" : i === T0 + 1 ? 'demain'
   : dayDate(w, i).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', '');
 
+const windSports = (s) => s.sports || (s.sport ? [s.sport] : []);
+const enabledSports = (s) => windSports(s).filter((x) => state.disc[x]);
+const primarySport = (s) => enabledSports(s)[0] || windSports(s)[0] || 'kitesea';
 function rangeFor(s) {
-  return s.type === 'wind' ? state.ranges[s.sport] || SPORTS.kitesea.def : state.kite;
+  return s.type === 'wind' ? state.ranges[primarySport(s)] || SPORTS.kitesea.def : state.kite;
 }
 function kiteRating(wind, gust, k = state.kite) {
   if (wind == null) return null;
@@ -102,7 +107,7 @@ const isKite = (s) => s.type === 'kite' || s.type === 'both';
 const isSki = (s) => s.type === 'ski' || s.type === 'both';
 const isWind = (s) => s.type === 'wind';             // spot perso kite mer / wing / planche
 const windy = (s) => isKite(s) || isWind(s);          // spots où le vent compte
-const sportOf = (s) => (isWind(s) ? s.sport : 'kite');
+const sportOf = (s) => (isWind(s) ? primarySport(s) : 'kite');
 
 /* ---------- météo (Open-Meteo, sans clé) ---------- */
 function summarize(w) {
@@ -136,9 +141,11 @@ function sessionsFor(s, w) {
       }
     }
     if (isWind(s)) {
-      const k = rangeFor(s);
-      if (wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax && code < 95) {
-        out.push({ i, kind: 'wind', sport: s.sport, far, txt: `${wv(wind)} ${U()} ${dirName(d.wind_direction_10m_dominant[i])}` });
+      for (const sp of enabledSports(s)) {
+        const k = state.ranges[sp];
+        if (wind >= k.windMin && wind <= k.windMax && gust <= k.gustMax && code < 95) {
+          out.push({ i, kind: 'wind', sport: sp, far, txt: `${wv(wind)} ${U()} ${dirName(d.wind_direction_10m_dominant[i])}` });
+        }
       }
     }
     if (isSki(s)) {
@@ -152,7 +159,8 @@ function sessionsFor(s, w) {
 }
 function relevantSessions(s) {
   const all = sessionsFor(s, state.weather[s.id]);
-  if (state.type === 'kite') return all.filter((x) => x.kind === 'kite' || x.kind === 'wind');
+  if (state.type === 'kite') return all.filter((x) => x.kind === 'kite');
+  if (state.type === 'water') return all.filter((x) => x.kind === 'wind');
   if (state.type === 'ski') return all.filter((x) => x.kind === 'ski');
   return all;
 }
@@ -199,12 +207,14 @@ function allSpots() { return [...state.mySpots, ...state.spots]; }
 function allInRadius() {
   return allSpots()
     .map((s) => ({ ...s, dist: haversine(state.loc, s) }))
-    .filter((s) => s.dist <= state.radius || s.custom); // mes spots : toujours visibles
+    .filter((s) => s.dist <= state.radius || s.custom) // mes spots : toujours visibles
+    .filter((s) => !isWind(s) || enabledSports(s).length); // disciplines affichées
 }
 function spotsInRadius() {
   return allInRadius()
     .filter((s) => state.type === 'all'
-      || (state.type === 'kite' && windy(s))
+      || (state.type === 'kite' && isKite(s))
+      || (state.type === 'water' && isWind(s))
       || (state.type === 'mine' && s.custom)
       || (state.type === 'ski' && isSki(s))
       || (state.type === 'fav' && state.favs.has(s.id)));
@@ -245,7 +255,8 @@ function computeAlerts(list) {
 /* Type de session, affiché partout (bandeau, fiches, notifications) */
 const SESS_TYPE = { kite: 'Snowkite', ski: 'Ski poudreuse', kitesea: 'Kite', wing: 'Wing', windsurf: 'Planche' };
 const sessType = (x) => SESS_TYPE[x.kind === 'wind' ? x.sport : x.kind];
-const sessIcon = (x) => (x.kind === 'ski' ? 'i-ski' : x.kind === 'wind' ? SPORTS[x.sport].icon : 'i-kite');
+const sessIcon = (x) => (x.kind === 'ski' ? 'i-ski' : x.kind === 'wind' ? SPORTS[x.sport].icon : 'i-snowkite');
+const sessCls = (x) => 't-' + (x.kind === 'wind' ? x.sport : x.kind); // couleur par type de session
 
 /* Alerte « session possible » : favoris, spots avec cloche et mes spots */
 function sessionAlertTargets() {
@@ -295,12 +306,17 @@ async function notify(alerts) {
   fresh.forEach((a) => { sent[a.s.id] = day; });
   store.set('sentAlerts', sent);
 }
+function groupByDay(ses) { // sessions d'un même jour regroupées (ex. Kite · Wing · Planche)
+  const m = new Map();
+  for (const x of ses) { if (!m.has(x.i)) m.set(x.i, []); m.get(x.i).push(x); }
+  return [...m.values()];
+}
 function renderAlertsBanner(alerts, sessions = []) {
   const el = $('#alertsBanner');
   el.hidden = !alerts.length && !sessions.length;
   el.innerHTML = sessions.map((a) =>
     `<div class="alert sess-alert" data-goto="${esc(a.s.id)}"><span class="sa-name"><b>${esc(a.s.name)}</b> <span class="muted">· session possible</span></span>
-      <span class="sa-list">${a.ses.map((x) => `<span class="stype ${x.kind === 'ski' ? 'ski' : 'kite'}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(a.w, x.i)} <span class="muted">${x.txt.replace(/^poudreuse /, '')}</span></span>`).join('')}</span></div>`
+      <span class="sa-list">${groupByDay(a.ses).map((g) => `<span class="stype">${g.map((x) => `<span class="${sessCls(x)}">${icon(sessIcon(x))}<b>${sessType(x)}</b></span>`).join('<span class="sep">·</span>')} ${dayLong(a.w, g[0].i)} <span class="muted">${[...new Set(g.map((x) => x.txt.replace(/^poudreuse /, '')))].join(' · ')}</span></span>`).join('')}</span></div>`
   ).join('') + alerts.map((a) =>
     `<div class="alert" data-goto="${esc(a.s.id)}">${icon('i-snow')}<span><b>${esc(a.s.name)}</b> · ${round(a.next72)} cm sur 3 jours <span class="muted">(seuil ${a.thr} cm)</span></span></div>`
   ).join('');
@@ -318,9 +334,10 @@ function linksFor(s) {
   return L.map(([ic, t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${icon(ic)}${t}</a>`).join('');
 }
 function typeIcons(s) {
-  if (isWind(s)) return icon(SPORTS[s.sport].icon);
-  return (isKite(s) ? icon('i-kite') : '') + (isSki(s) ? icon('i-ski') : '');
+  if (isWind(s)) return enabledSports(s).map((x) => icon(SPORTS[x].icon)).join('');
+  return (isKite(s) ? icon('i-snowkite') : '') + (isSki(s) ? icon('i-ski') : '');
 }
+const sportsLabel = (s) => enabledSports(s).map((x) => SESS_TYPE[x]).join(' · ');
 
 function renderCard(s, alerting) {
   const node = $('#cardTpl').content.firstElementChild.cloneNode(true);
@@ -331,7 +348,8 @@ function renderCard(s, alerting) {
   h.innerHTML = typeIcons(s);
   h.append(s.name);
   node.querySelector('.meta').textContent = s.custom
-    ? `Mon spot · ${SPORTS[sportOf(s)].label} · ${round(s.dist)} km`
+    ? `Mon spot · ${sportsLabel(s) || SPORTS[sportOf(s)].label} · ${round(s.dist)} km`
+    : isWind(s) ? `${s.massif} · ${sportsLabel(s)} · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
   node.classList.toggle('mine', !!s.custom);
   node.querySelector('.info').textContent = s.info || '';
@@ -372,7 +390,7 @@ function renderCard(s, alerting) {
   const sess = sessionsFor(s, w);
   const shown = relevantSessions(s);
   node.querySelector('.sessions').innerHTML = shown.slice(0, 6).map((x) =>
-    `<span class="sess ${x.kind === 'wind' ? 'kite' : x.kind}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(w, x.i)} · ${x.txt.replace(/^poudreuse /, '')}</span>`
+    `<span class="sess ${sessCls(x)}${x.far ? ' far' : ''}" title="${x.far ? 'Prévision lointaine, indicative' : ''}">${icon(sessIcon(x))}<b>${sessType(x)}</b> ${dayLong(w, x.i)} · ${x.txt.replace(/^poudreuse /, '')}</span>`
   ).join('') + (shown.length > 6 ? `<span class="sess muted">+${shown.length - 6}</span>` : '');
 
   const byDay = {};
@@ -463,7 +481,7 @@ function mapStatus(s, w, day) {
 }
 function mapSpots() {
   return allInRadius()
-    .filter((s) => (s.custom ? state.mapMine : (state.mapKite && isKite(s)) || (state.mapSki && isSki(s))))
+    .filter((s) => (s.custom ? state.mapMine : isWind(s) ? state.mapWater : (state.mapKite && isKite(s)) || (state.mapSki && isSki(s))))
     .filter((s) => !state.sessionsOnly || relevantSessions(s).length);
 }
 function renderMapDays() {
@@ -508,12 +526,12 @@ function renderMap() {
     if (!seen.has(st)) seen.set(st, new Set());
     seen.get(st).add(shape);
     shown++;
-    const html = `<div class="mk ${shape}${s.custom ? ' mine' : ''} st-${st}">${icon(isWind(s) ? SPORTS[s.sport].icon : kite ? 'i-kite' : 'i-ski')}` +
+    const html = `<div class="mk ${shape}${s.custom ? ' mine' : ''} st-${st}">${icon(isWind(s) ? SPORTS[primarySport(s)].icon : kite ? 'i-snowkite' : 'i-ski')}` +
       (n != null ? `<span class="mk-n">${n}</span>` : '') + '</div>';
     const div = document.createElement('div');
     const b = document.createElement('b'); b.textContent = s.name; div.append(b);
     const dayTxt = state.mapDay === 'all' ? 'sur 14 jours' : dayLong(w || Object.values(state.weather)[0], T0 + state.mapDay);
-    div.insertAdjacentHTML('beforeend', `<br>${s.custom ? `Mon spot · ${SPORTS[sportOf(s)].label}` : kite ? 'Spot snowkite' : 'Station'} · ${s.alt} m · ${round(s.dist)} km` +
+    div.insertAdjacentHTML('beforeend', `<br>${s.custom ? `Mon spot · ${sportsLabel(s)}` : isWind(s) ? sportsLabel(s) : kite ? 'Spot snowkite' : 'Station'} · ${s.alt} m · ${round(s.dist)} km` +
       `<br><span class="pop-st st-${st}">${MAP_STATUS[st].label}</span> <span class="muted">${dayTxt}</span>` +
       (w && state.mapDay !== 'all' && isWind(s) ? `<br>Vent max ${wv(w.daily.wind_speed_10m_max[T0 + state.mapDay])} ${U()} ${dirName(w.daily.wind_direction_10m_dominant[T0 + state.mapDay])} · raf. ${wv(w.daily.wind_gusts_10m_max[T0 + state.mapDay])}` : '') +
       (w && state.mapDay !== 'all' && !isWind(s) ? `<br>Vent max ${wv(w.daily.wind_speed_10m_max[T0 + state.mapDay])} ${U()} ${dirName(w.daily.wind_direction_10m_dominant[T0 + state.mapDay])} · raf. ${wv(w.daily.wind_gusts_10m_max[T0 + state.mapDay])} · ${round(snowDepth(w, T0 + state.mapDay))} cm au sol` : '') +
@@ -530,7 +548,7 @@ function renderMap() {
   const order = Object.keys(MAP_STATUS);
   $('#mapLegend').innerHTML = [...seen.keys()].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((st) =>
     `<span>${[...seen.get(st)].sort().map((f) => `<i class="lg ${f} st-${st}"></i>`).join('')}${MAP_STATUS[st].label}</span>`).join('')
-    + `<span class="lg-note">◆ spot snowkite · ● station · ■ mon spot · chiffre : ${state.mapDay === 'all' ? 'jours de session ou cm sur 3 j' : `vent max (${U()}) ou cm de neige`}</span>`
+    + `<span class="lg-note">◆ snowkite · ● station · ■ mer, lac et mes spots · chiffre : ${state.mapDay === 'all' ? 'jours de session ou cm sur 3 j' : `vent max (${U()}) ou cm de neige`}</span>`
     || '<span>Aucun spot ne correspond.</span>';
   if (!seen.size) $('#mapLegend').innerHTML = '<span>Aucun spot ne correspond à ces conditions.</span>';
   if (!state.mapFitted || state.mapFitted !== `${state.loc.lat},${state.loc.lon},${state.radius}`) {
@@ -643,6 +661,37 @@ function setupKiteSliders() {
     };
   }
 }
+
+/* ---------- carte en fenêtre (choisir ou voir un spot) ---------- */
+const pick = { map: null, marker: null, latlng: null, mode: 'view' };
+function openMapDialog({ mode = 'view', spot = null } = {}) {
+  const dlg = $('#mapDlg');
+  pick.mode = mode; pick.latlng = null;
+  $('#mapDlgTitle').textContent = mode === 'pick' ? 'Choisis l’emplacement du spot' : spot.name;
+  $('#mapDlgHint').textContent = mode === 'pick' ? 'Touche la carte pour placer le spot, puis valide.' : `${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}${spot.alt ? ' · ' + spot.alt + ' m' : ''}`;
+  $('#mapDlgOk').hidden = mode !== 'pick'; $('#mapDlgOk').disabled = true;
+  if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
+  if (!window.L) return;
+  if (!pick.map) {
+    pick.map = L.map('pickMap', { zoomControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(pick.map);
+    pick.map.on('click', (e) => {
+      if (pick.mode !== 'pick') return;
+      pick.latlng = e.latlng;
+      if (pick.marker) pick.marker.setLatLng(e.latlng); else pick.marker = L.marker(e.latlng).addTo(pick.map);
+      $('#mapDlgHint').textContent = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)} — valide ou touche ailleurs pour déplacer`;
+      $('#mapDlgOk').disabled = false;
+    });
+  }
+  if (pick.marker) { pick.marker.remove(); pick.marker = null; }
+  const center = spot ? [spot.lat, spot.lon] : [state.loc.lat, state.loc.lon];
+  setTimeout(() => {
+    pick.map.invalidateSize();
+    pick.map.setView(center, spot ? 13 : 10);
+    if (spot) pick.marker = L.marker(center).addTo(pick.map).bindPopup(esc(spot.name));
+  }, 60);
+}
+function closeMapDialog() { const d = $('#mapDlg'); d.close ? d.close() : d.removeAttribute('open'); }
 
 /* ---------- mes spots ---------- */
 function saveMySpots() { store.set('mySpots', state.mySpots); }
@@ -998,13 +1047,25 @@ function bindUI() {
       const f = formSpot(); addMySpot(p.coords.latitude, p.coords.longitude, f.name || 'Mon spot', f.sport);
     }, () => toast('Localisation refusée'), { timeout: 10000 });
   };
-  $('#msPick').onclick = () => {
-    state.pickMode = formSpot();
-    dlg.close ? dlg.close() : dlg.removeAttribute('open');
-    document.querySelector('.tabs button[data-view="map"]').click();
-    toast('Touche la carte pour placer ton spot');
+  $('#msPick').onclick = () => openMapDialog({ mode: 'pick' });
+  $('#mapDlgOk').onclick = () => {
+    if (!pick.latlng) return;
+    const f = formSpot(); closeMapDialog();
+    const name = f.name || prompt('Nom du spot :', 'Mon spot');
+    if (name === null) return;
+    addMySpot(pick.latlng.lat, pick.latlng.lng, name.trim() || 'Mon spot', f.sport);
   };
-  $('#msAlmanarre').onclick = () => addMySpot(43.0605, 6.1307, 'Almanarre (Hyères)', $('#msSport').value === 'kite' ? 'kitesea' : $('#msSport').value);
+  $('#mapDlg').addEventListener('click', (e) => {
+    if (e.target === $('#mapDlg') || e.target.closest('[data-close]')) closeMapDialog();
+  });
+  $('#dMapBtn').onclick = () => { if (detail.spot) openMapDialog({ spot: detail.spot }); };
+  document.querySelectorAll('#discSel button').forEach((b) => {
+    b.setAttribute('aria-pressed', !!state.disc[b.dataset.disc]);
+    b.onclick = () => {
+      state.disc[b.dataset.disc] = !state.disc[b.dataset.disc]; store.set('disc', state.disc);
+      b.setAttribute('aria-pressed', state.disc[b.dataset.disc]); refresh();
+    };
+  });
   const sa = $('#sessionAlert'); sa.checked = state.sessionAlert;
   sa.onchange = () => { state.sessionAlert = sa.checked; store.set('sessionAlert', sa.checked); if (sa.checked) askNotif(); render(); };
   const hz = $('#horizon'); hz.value = state.sessionHorizon; $('#horizonVal').textContent = state.sessionHorizon;
@@ -1029,14 +1090,15 @@ function bindUI() {
       session_horizon_days: state.sessionHorizon,
       session_spots: [...state.favs, ...Object.keys(state.bells)].filter((v, i, a) => a.indexOf(v) === i),
       ranges_kmh: { kite: state.kite, ...state.ranges },
-      my_spots: state.mySpots.map(({ id, name, type, sport, lat, lon, alt }) => ({ id, name, type, sport, lat, lon, alt })),
+      disciplines: Object.keys(state.disc).filter((k) => state.disc[k]),
+      my_spots: state.mySpots.map(({ id, name, type, sport, sports, lat, lon, alt }) => ({ id, name, type, sport, sports, lat, lon, alt })),
     };
     const txt = JSON.stringify(cfg, null, 2);
     try { await navigator.clipboard.writeText(txt); $('#exportMsg').textContent = 'Copié. Colle-le dans alerts-config.json.'; }
     catch { prompt('Copie ce texte dans alerts-config.json :', txt); }
   };
 
-  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki'], ['#mapMine', 'mapMine'], ['#mapGood', 'mapGoodOnly']]) {
+  for (const [btn, key] of [['#mapKite', 'mapKite'], ['#mapSki', 'mapSki'], ['#mapMine', 'mapMine'], ['#mapWater', 'mapWater'], ['#mapGood', 'mapGoodOnly']]) {
     const el = $(btn); el.setAttribute('aria-pressed', state[key]);
     el.onclick = () => { state[key] = !state[key]; store.set(key, state[key]); el.setAttribute('aria-pressed', state[key]); render(); };
   }
@@ -1089,9 +1151,9 @@ function bindUI() {
 async function init() {
   bindUI();
   showLoc();
-  const [cur, osm] = await Promise.all(['spots.json', 'spots-osm.json'].map((f) =>
+  const [cur, osm, eau] = await Promise.all(['spots.json', 'spots-osm.json', 'spots-eau.json'].map((f) =>
     fetch(f).then((r) => (r.ok ? r.json() : [])).catch(() => [])));
-  state.spots = [...cur, ...osm];
+  state.spots = [...cur, ...eau, ...osm];
   await refresh();
   setInterval(() => refresh(), CHECK_EVERY_MIN * 60000);
   if ('serviceWorker' in navigator) {

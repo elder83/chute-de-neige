@@ -410,3 +410,29 @@ h2[tabindex]:focus { outline: none; }
 .stype .i { width: 15px; height: 15px; }
 #alertsBanner .stype.kite .i { color: var(--good); }
 #alertsBanner .stype.ski .i { color: var(--snow); }
+
+/* Couleur par type de session (icônes différentes + teinte) */
+.t-kite { --tc: #16a34a; }      /* snowkite */
+.t-ski { --tc: #2563eb; }       /* ski poudreuse */
+.t-kitesea { --tc: #0891b2; }   /* kite mer/lac */
+.t-wing { --tc: #7c3aed; }      /* wing */
+.t-windsurf { --tc: #db2777; }  /* planche */
+@media (prefers-color-scheme: dark) {
+  .t-kite { --tc: #34c46f; } .t-ski { --tc: #6ea8ff; } .t-kitesea { --tc: #22d3ee; } .t-wing { --tc: #a78bfa; } .t-windsurf { --tc: #f472b6; }
+}
+.sess[class*="t-"] .i, #alertsBanner .stype[class*="t-"] .i { color: var(--tc); }
+.stype[class*="t-"], .sess[class*="t-"] { border-color: color-mix(in srgb, var(--tc) 45%, var(--border)); }
+.stype[class*="t-"] b, .sess[class*="t-"] b { color: var(--tc); }
+.card h3 .i + .i { margin-left: -2px; }
+
+/* Carte en fenêtre */
+#pickMap { flex: 1; min-height: 300px; margin: 0 16px; border-radius: 14px; border: 1px solid var(--border); background: var(--faint); }
+.map-dlg-foot { padding: 10px 16px 16px; display: flex; justify-content: flex-end; flex: none; }
+.map-dlg-foot .btn[disabled] { opacity: .4; }
+#mapDlg { display: none; flex-direction: column; }
+#mapDlg[open] { display: flex; }
+
+#alertsBanner .stype > span[class*="t-"] { display: inline-flex; align-items: center; gap: 4px; }
+#alertsBanner .stype > span[class*="t-"] .i { color: var(--tc); }
+#alertsBanner .stype > span[class*="t-"] b { color: var(--tc); }
+#alertsBanner .stype .sep { color: var(--muted); margin: 0 1px; }
