@@ -314,18 +314,34 @@ function visibleSpots() {
   const list = spotsInRadius();
   return state.sessionsOnly ? list.filter((s) => relevantSessions(s).length) : list;
 }
+/* Tris : chaque tri a une clé (plus petit = en premier) et une valeur affichée sur la fiche */
+const sessDays = (s) => new Set(relevantSessions(s).map((x) => x.i)).size;
+const SORTS = {
+  dist:      { key: (s) => s.dist, badge: null },
+  snow:      { snowOnly: true, key: (s, w) => -summarize(w).next72, badge: (s, w) => `+${round(summarize(w).next72)} cm`, need: true },
+  fresh:     { snowOnly: true, key: (s, w) => -snowPack(w).fresh, badge: (s, w) => `${round(snowPack(w).fresh)} cm frais`, need: true },
+  depth:     { snowOnly: true, key: (s, w) => -snowPack(w).total, badge: (s, w) => `${round(snowPack(w).total)} cm au sol`, need: true },
+  session:   { key: (s) => { const x = relevantSessions(s)[0]; return x ? x.i * 10000 + s.dist : 1e9 + s.dist; },
+               badge: (s, w) => { const x = relevantSessions(s)[0]; return x ? dayLong(w, x.i) : null; }, need: true },
+  sessdays:  { key: (s) => -sessDays(s) * 10000 + s.dist, badge: (s) => (sessDays(s) ? `${sessDays(s)} j de session` : null), need: true },
+  wind:      { key: (s, w) => { // vent actuel le plus proche du milieu de ta plage (spots de vent d'abord)
+                 const r = rangeFor(s), v = w.current.wind_speed_10m;
+                 return (windy(s) ? 0 : 1000) + Math.abs(v - (r.windMin + r.windMax) / 2); },
+               badge: (s, w) => `${wv(w.current.wind_speed_10m)} ${U()}`, need: true },
+  alt:       { key: (s) => -(s.alt || 0), badge: (s) => `${s.alt} m` },
+  name:      { key: null, badge: null },
+};
 function sortSpots(list) {
-  const key = {
-    dist: (s) => s.dist,
-    snow: (s) => -(state.weather[s.id] ? summarize(state.weather[s.id]).next72 : -1),
-    wind: (s) => {
-      const w = wx(s); if (!w) return 999;
-      const v = w.current.wind_speed_10m;
-      return windy(s) ? Math.abs(v - 25) : 500 + Math.abs(v - 25);
-    },
-    session: (s) => { const x = relevantSessions(s)[0]; return x ? x.i * 10000 + s.dist : 1e9 + s.dist; },
-  }[state.sort];
-  return list.sort((a, b) => key(a) - key(b));
+  const S = SORTS[state.sort] || SORTS.dist;
+  if (!S.key) return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  // sans météo : en dernier ; à égalité, le plus proche d'abord
+  const k = (s) => { const w = wx(s); return ((S.need && !w) || (S.snowOnly && isWind(s)) ? 1e12 : S.key(s, w)) + s.dist * 1e-6; };
+  return list.sort((a, b) => k(a) - k(b));
+}
+function sortBadge(s) {
+  const S = SORTS[state.sort]; const w = wx(s);
+  if (!S?.badge || (S.need && !w) || (S.snowOnly && isWind(s))) return '';
+  const t = S.badge(s, w); return t ? `<span class="sort-badge">${esc(t)}</span>` : '';
 }
 
 /* ---------- alertes ---------- */
@@ -457,6 +473,7 @@ function renderCard(s, alerting) {
   const h = node.querySelector('.name');
   h.innerHTML = typeIcons(s);
   h.append(s.name);
+  h.insertAdjacentHTML('afterend', sortBadge(s));
   node.querySelector('.meta').textContent = s.custom
     ? `Mon spot · ${s.type === 'ski' ? s.massif : sportsLabel(s) || SPORTS[sportOf(s)].label} · ${round(s.dist)} km`
     : isWind(s) ? `${s.massif} · ${sportsLabel(s)} · ${round(s.dist)} km`

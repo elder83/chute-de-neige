@@ -561,3 +561,9 @@ h2[tabindex]:focus { outline: none; }
 .ens-bar { height: 10px; border-radius: 5px; background: var(--faint); overflow: hidden; }
 .ens-bar i { display: block; height: 100%; background: var(--good); border-radius: 5px; }
 .ens-row b { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* valeur du tri affichée sur la fiche */
+.card .title { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.card .title .meta { flex-basis: 100%; }
+.sort-badge { font-size: 12px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+#sort { font-size: 14px; }

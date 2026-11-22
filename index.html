@@ -92,10 +92,21 @@
       </button>
       <button id="btnHelp" class="icon-btn help-btn" title="Qu'est-ce qu'une session ?" aria-label="Qu'est-ce qu'une session ?"><svg class="i"><use href="#i-help"/></svg></button>
       <select id="sort" aria-label="Trier par">
-        <option value="dist">Distance</option>
-        <option value="snow">Neige</option>
-        <option value="wind">Vent</option>
-        <option value="session">Session</option>
+        <option value="dist">Les plus proches</option>
+        <optgroup label="Neige">
+          <option value="snow">Plus grosse chute à venir (3 j)</option>
+          <option value="fresh">Plus de neige fraîche (72 h)</option>
+          <option value="depth">Plus de neige au sol</option>
+        </optgroup>
+        <optgroup label="Sessions">
+          <option value="session">Prochaine session</option>
+          <option value="sessdays">Plus de jours de session (14 j)</option>
+          <option value="wind">Vent idéal maintenant</option>
+        </optgroup>
+        <optgroup label="Autre">
+          <option value="alt">Plus haute altitude</option>
+          <option value="name">Ordre alphabétique</option>
+        </optgroup>
       </select>
     </div>
   </section>
