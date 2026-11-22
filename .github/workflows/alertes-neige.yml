@@ -19,7 +19,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Diagnostic du sujet ntfy (n'affiche jamais sa valeur)
+        env:
+          S_OK: ${{ secrets.NTFY_TOPIC != '' }}
+          V_OK: ${{ vars.NTFY_TOPIC != '' }}
+          TYPO: ${{ secrets.NFTY_TOPIC != '' || secrets.NTFY != '' || secrets.TOPIC != '' || secrets.NTFY_TOPIC_ != '' || vars.NFTY_TOPIC != '' || vars.NTFY != '' }}
+        run: |
+          echo "Secret NTFY_TOPIC (onglet Secrets, Repository secrets) : $S_OK"
+          echo "Variable NTFY_TOPIC (onglet Variables) : $V_OK"
+          echo "Nom approchant (NFTY_TOPIC, NTFY, TOPIC...) : $TYPO"
       - name: Vérifier la neige et notifier
         env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          # secret de préférence ; une variable du même nom est aussi acceptée
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC || vars.NTFY_TOPIC }}
         run: python scripts/check_snow.py
