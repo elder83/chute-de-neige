@@ -472,3 +472,9 @@ h2[tabindex]:focus { outline: none; }
 #discSel button[aria-pressed=true] { background: var(--text); border-color: var(--text); color: var(--card); }
 #discSel button[aria-pressed=false] { color: var(--muted); border-style: dashed; }
 #discSel button[aria-pressed=false] .i { opacity: .5; }
+
+/* Neige au sol : fraîche / ancienne */
+.now .pack-row { flex-wrap: wrap; white-space: normal; }
+.pack { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 35%, transparent); overflow: hidden; vertical-align: middle; }
+.pack .pf { display: block; height: 100%; background: var(--snow); }
+.now .fresh { color: var(--snow); font-weight: 600; }

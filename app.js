@@ -122,6 +122,22 @@ function snowDepth(w, i) {
   return base;
 }
 
+/* Neige au sol maintenant : totale, fraîche (tombée sur 72 h) et ancienne */
+function snowPack(w) {
+  const total = w.current.snow_depth != null ? w.current.snow_depth * 100 : snowDepth(w, T0);
+  const fell = sum(w.daily.snowfall_sum.slice(0, T0 + 1)); // 2 jours passés + aujourd'hui
+  const fresh = Math.min(total, fell);
+  return { total, fresh, old: Math.max(0, total - fresh) };
+}
+function packHtml(w) {
+  const { total, fresh, old } = snowPack(w);
+  if (total < 0.5) return `${icon('i-mountain')}<span class="muted">pas de neige au sol</span>`;
+  const pf = Math.round((fresh / total) * 100);
+  return `${icon('i-mountain')}<b>${round(total)}</b> cm au sol
+    <span class="pack" title="Fraîche (72 h) : ${round(fresh)} cm · ancienne : ${round(old)} cm"><i class="pf" style="width:${pf}%"></i></span>
+    <span class="muted"><span class="fresh">${round(fresh)} fraîche</span> · ${round(old)} ancienne</span>`;
+}
+
 /* Détection des sessions sur 14 jours */
 function sessionsFor(s, w) {
   if (!w) return [];
@@ -394,7 +410,7 @@ function renderCard(s, alerting) {
   node.querySelector('.now').innerHTML = `
     <span>${icon(wxId(c.weather_code))}<b>${round(c.temperature_2m)}°</b></span>
     <span title="Vent actuel">${kr ? `<i class="dot ${kr.cls}" title="${kr.txt}"></i>` : icon('i-wind')}<b>${wv(c.wind_speed_10m)}</b> ${U()} ${arrow(c.wind_direction_10m)}${dirName(c.wind_direction_10m)} <span class="muted">raf. ${wv(c.wind_gusts_10m)}</span></span>` + (isWind(s) ? '' : `
-    <span title="Neige au sol (estimée)">${icon('i-mountain')}<b>${c.snow_depth != null ? round(c.snow_depth * 100) : '–'}</b> cm</span>
+    <span class="pack-row" title="Neige au sol (modèle) : fraîche = tombée sur 72 h">${packHtml(w)}</span>
     <span title="Neige prévue sur 3 jours (48 h passées : ${round(sm.past48)} cm)">${icon('i-snow')}<b class="plus">+${round(sm.next72)}</b> cm / 3 j</span>`);
 
   const sess = sessionsFor(s, w);
@@ -544,7 +560,8 @@ function renderMap() {
       `<br><span class="pop-st st-${st}">${MAP_STATUS[st].label}</span> <span class="muted">${dayTxt}</span>` +
       (w && state.mapDay !== 'all' && isWind(s) ? `<br>Vent max ${wv(w.daily.wind_speed_10m_max[T0 + state.mapDay])} ${U()} ${dirName(w.daily.wind_direction_10m_dominant[T0 + state.mapDay])} · raf. ${wv(w.daily.wind_gusts_10m_max[T0 + state.mapDay])}` : '') +
       (w && state.mapDay !== 'all' && !isWind(s) ? `<br>Vent max ${wv(w.daily.wind_speed_10m_max[T0 + state.mapDay])} ${U()} ${dirName(w.daily.wind_direction_10m_dominant[T0 + state.mapDay])} · raf. ${wv(w.daily.wind_gusts_10m_max[T0 + state.mapDay])} · ${round(snowDepth(w, T0 + state.mapDay))} cm au sol` : '') +
-      (w && state.mapDay === 'all' ? `<br>Maintenant : ${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()} · ${round(snowDepth(w, T0))} cm au sol` : '') +
+      (w && state.mapDay === 'all' ? `<br>Maintenant : ${round(w.current.temperature_2m)}° · vent ${wv(w.current.wind_speed_10m)} ${U()}` +
+        (isWind(s) ? '' : `<br>${round(snowPack(w).total)} cm au sol dont ${round(snowPack(w).fresh)} cm de fraîche`) : '') +
       `<br><a href="#" data-goto="${esc(s.id)}" data-day="${state.mapDay === 'all' ? 0 : state.mapDay}">Détail heure par heure et modèles</a>`);
     L.marker([s.lat, s.lon], {
       icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
@@ -1097,7 +1114,8 @@ function bindUI() {
   $('#notifState').textContent = notifStateText();
   $('#btnExport').onclick = async () => {
     const cfg = {
-      home: { lat: +state.loc.lat.toFixed(4), lon: +state.loc.lon.toFixed(4), label: state.loc.label },
+      // position arrondie à ~10 km : la config est publique, on n'y met jamais la position GPS exacte
+      home: { lat: +state.loc.lat.toFixed(1), lon: +state.loc.lon.toFixed(1), label: state.loc.label === 'ma position' ? 'zone (position arrondie)' : state.loc.label },
       radius_km: state.radius,
       default_threshold_cm: state.threshold,
       alert_all_in_radius: state.alertAll,
