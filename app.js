@@ -29,7 +29,10 @@ const state = {
   weather: {},
   loc: (() => { const l = store.get('loc', HYERES); l.label = String(l.label).replace(' (par défaut)', ''); return l; })(),
   radius: store.get('radius', 400),
-  type: store.get('type', 'all'),
+  // sports choisis (vide = tous) et portée : favoris et/ou mes spots
+  types: new Set(store.get('types', (() => { const t = store.get('type', 'all');
+    return t === 'kite' ? ['kite'] : t === 'ski' ? ['ski'] : t === 'water' ? ['kitesea', 'wing', 'windsurf'] : []; })())),
+  scope: new Set(store.get('scope', (() => { const t = store.get('type', 'all'); return t === 'fav' || t === 'mine' ? [t] : []; })())),
   sort: store.get('sort', 'dist'),
   // tris enchaînés (jusqu'à 3) et filtres
   sorts: store.get('sorts', [store.get('sort', 'dist')]),
@@ -187,10 +190,8 @@ function computeSessions(s, w) {
 }
 function relevantSessions(s) {
   const all = sessionsFor(s, wx(s));
-  if (state.type === 'kite') return all.filter((x) => x.kind === 'kite');
-  if (state.type === 'water') return all.filter((x) => x.kind === 'wind');
-  if (state.type === 'ski') return all.filter((x) => x.kind === 'ski');
-  return all;
+  if (!state.types.size) return all;
+  return all.filter((x) => state.types.has(x.kind === 'wind' ? x.sport : x.kind));
 }
 
 /* Météo d'un spot avec la correction de vent de l'utilisateur appliquée */
@@ -305,15 +306,19 @@ function searchResults(q = state.q) { // recherche dans toute la France, sans li
     .map(({ s, sc }) => ({ ...s, dist: haversine(state.loc, s), sc }))
     .sort((a, b) => b.sc - a.sc || a.dist - b.dist);
 }
+/* Sports pratiqués sur un spot : snowkite, ski, et disciplines mer/lac choisies */
+function spotSports(s) {
+  const out = [];
+  if (isKite(s)) out.push('kite');
+  if (isSki(s)) out.push('ski');
+  if (isWind(s)) out.push(...enabledSports(s));
+  return out;
+}
 function spotsInRadius() {
   if (state.q.trim()) return searchResults();
   return allInRadius()
-    .filter((s) => state.type === 'all'
-      || (state.type === 'kite' && isKite(s))
-      || (state.type === 'water' && isWind(s))
-      || (state.type === 'mine' && s.custom)
-      || (state.type === 'ski' && isSki(s))
-      || (state.type === 'fav' && state.favs.has(s.id)));
+    .filter((s) => !state.types.size || spotSports(s).some((x) => state.types.has(x)))
+    .filter((s) => !state.scope.size || (state.scope.has('fav') && state.favs.has(s.id)) || (state.scope.has('mine') && s.custom));
 }
 const snowFilterOn = () => state.filters.freshMin || state.filters.snow3Min || state.filters.depthMin;
 function activeFilters() {
@@ -396,6 +401,19 @@ function filterSummary() { // ex. « altitude ≥ 1500 m · neige fraîche ≥ 1
   if (f.altMin) out.push(`altitude ≥ ${f.altMin} m`);
   if (f.windNow) out.push('vent bon maintenant');
   return out.join(' · ');
+}
+/* Filtres du haut : multi-sélection ; Kite / Wing / Planche selon les disciplines choisies */
+function syncTypeChips() {
+  document.querySelectorAll('#typeFilter button').forEach((b) => {
+    const t = b.dataset.type;
+    if (['kitesea', 'wing', 'windsurf'].includes(t)) {
+      b.hidden = !state.disc[t];
+      if (!state.disc[t]) state.types.delete(t);
+    }
+    const on = t === 'all' ? !state.types.size && !state.scope.size : state.types.has(t) || state.scope.has(t);
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on);
+  });
 }
 function syncSortButton() {
   const n = activeFilters(), keys = sortList();
@@ -660,8 +678,8 @@ function render() {
   const n = list.length, pl = n > 1 ? 's' : '';
   const where = `${state.radius} km autour de ${state.loc.label}`;
   let msg;
-  if (state.type === 'mine' && !state.mySpots.length) msg = 'Aucun spot perso : ajoute-en dans ⚙ Paramètres → Mes spots.';
-  else if (state.type === 'fav' && !state.favs.size) msg = 'Aucun favori : touche ☆ sur une fiche pour suivre un spot.';
+  if (state.scope.has('mine') && !state.scope.has('fav') && !state.mySpots.length) msg = 'Aucun spot perso : ajoute-en dans ⚙ Paramètres → Mes spots.';
+  else if (state.scope.has('fav') && !state.scope.has('mine') && !state.favs.size) msg = 'Aucun favori : touche ☆ sur une fiche pour suivre un spot.';
   else if (state.q.trim()) msg = n ? `${n} résultat${pl} pour « ${state.q.trim()} » (toute la France)` : `Aucun spot ni station pour « ${state.q.trim()} »`;
   else if (!n) msg = activeFilters() ? `Aucun spot ne correspond aux filtres · ${where}` : `Aucun spot · ${where} — augmente le rayon dans ⚙`;
   else msg = state.sessionsOnly ? `${n} spot${pl} avec une session possible · ${where}` : `${n} spot${pl} · ${where}`;
@@ -706,7 +724,7 @@ function mapStatus(s, w, day) {
     if (ses.some((x) => x.kind === 'wind')) return { st: 'good', n: wv(wind) };
     return { st: wind < rangeFor(s).windMin ? 'weak' : 'strong', n: wv(wind) };
   }
-  if (isKite(s) && state.type !== 'ski') {
+  if (isKite(s) && (!state.types.size || state.types.has('kite'))) {
     const k = state.kite;
     if (snowDepth(w, i) < k.minSnow) return { st: sf >= 3 ? 'snowing' : 'nosnow', n: sf >= 3 ? `+${round(sf)}` : null };
     if (wind < k.windMin) return { st: 'weak', n: wv(wind) };
@@ -1414,14 +1432,16 @@ function bindUI() {
   radius.oninput = () => { $('#radiusVal').textContent = radius.value; };
   radius.onchange = () => { state.radius = +radius.value; store.set('radius', state.radius); showLoc(); refresh(); };
 
-  document.querySelectorAll('#typeFilter button').forEach((b) => {
-    b.classList.toggle('active', b.dataset.type === state.type);
-    b.onclick = () => {
-      state.type = b.dataset.type; store.set('type', state.type);
-      document.querySelectorAll('#typeFilter button').forEach((x) => x.classList.toggle('active', x === b));
-      render(); window.scrollTo({ top: 0 });
-    };
+  $('#typeFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const t = b.dataset.type;
+    if (t === 'all') { state.types.clear(); state.scope.clear(); }
+    else if (t === 'fav' || t === 'mine') state.scope.has(t) ? state.scope.delete(t) : state.scope.add(t);
+    else state.types.has(t) ? state.types.delete(t) : state.types.add(t);
+    store.set('types', [...state.types]); store.set('scope', [...state.scope]);
+    syncTypeChips(); render(); window.scrollTo({ top: 0 });
   });
+  syncTypeChips();
   // raccourci « Sessions possibles » = filtre session dans les 14 jours (+ tri par prochaine session)
   $('#btnSessions').onclick = () => {
     const on = !state.sessionsOnly;
@@ -1504,7 +1524,7 @@ function bindUI() {
       b.setAttribute('aria-pressed', on);
       const names = Object.keys(state.disc).filter((x) => state.disc[x]).map((x) => SESS_TYPE[x]);
       toast(names.length ? `Disciplines affichées : ${names.join(', ')}` : 'Aucune discipline : spots mer & lacs masqués');
-      render();
+      syncTypeChips(); render();
     };
   });
   const nt = $('#ntfyTopic'); nt.value = state.ntfyTopic;

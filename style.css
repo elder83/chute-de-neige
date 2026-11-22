@@ -583,3 +583,7 @@ h2[tabindex]:focus { outline: none; }
 .sort-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); flex: none; }
 .sort-foot .link { margin: 0; }
 .card .title .sort-badge + .sort-badge { margin-left: -2px; }
+
+/* filtres multi-sélection */
+.chip-sep { flex: none; width: 1px; align-self: stretch; background: var(--border); margin: 4px 2px; }
+#typeFilter button[hidden] { display: none; }
