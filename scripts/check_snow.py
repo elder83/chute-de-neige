@@ -137,6 +137,8 @@ def session_alerts(cfg, spots, state):
             wind, gust, code = d["wind_speed_10m_max"][i], d["wind_gusts_10m_max"][i], d["weather_code"][i] or 0
             if wind is None or gust is None:
                 continue
+            f = 1 + cfg.get("wind_adj_pct", {}).get(s["id"], 0) / 100  # correction du vent de ce spot
+            wind, gust = wind * f, gust * f
             rain = 51 <= code <= 67 or 80 <= code <= 82
             dirn = DIRS[round((d["wind_direction_10m_dominant"][i] or 0) / 45) % 8]
             # vent : snowkite (spots kite) ou kite/wing/planche (mes spots)

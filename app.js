@@ -47,6 +47,7 @@ const state = {
   mapDay: 'all',
   bannerOpen: store.get('bannerOpen', null),   // bandeau d'alertes déplié ?
   q: '',                                       // recherche de spot / station
+  windAdj: store.get('windAdj', {}),           // correction du vent par spot, en % (relief, effet venturi…)
   ntfyTopic: store.get('ntfyTopic', ''),
   view: 'list',
   map: null, markers: null,
@@ -180,11 +181,27 @@ function computeSessions(s, w) {
   return out;
 }
 function relevantSessions(s) {
-  const all = sessionsFor(s, state.weather[s.id]);
+  const all = sessionsFor(s, wx(s));
   if (state.type === 'kite') return all.filter((x) => x.kind === 'kite');
   if (state.type === 'water') return all.filter((x) => x.kind === 'wind');
   if (state.type === 'ski') return all.filter((x) => x.kind === 'ski');
   return all;
+}
+
+/* Météo d'un spot avec la correction de vent de l'utilisateur appliquée */
+const adjOf = (s) => 1 + (state.windAdj[s.id] || 0) / 100;
+const wxAdjCache = new Map();
+function wx(s) {
+  const w = state.weather[s.id]; if (!w) return w;
+  const f = adjOf(s); if (f === 1) return w;
+  const hit = wxAdjCache.get(s.id);
+  if (hit && hit.w === w && hit.f === f) return hit.out;
+  const m = (a) => a.map((v) => (v == null ? v : v * f));
+  const out = { ...w,
+    current: { ...w.current, wind_speed_10m: w.current.wind_speed_10m * f, wind_gusts_10m: w.current.wind_gusts_10m * f },
+    daily: { ...w.daily, wind_speed_10m_max: m(w.daily.wind_speed_10m_max), wind_gusts_10m_max: m(w.daily.wind_gusts_10m_max) } };
+  wxAdjCache.set(s.id, { w, f, out });
+  return out;
 }
 
 let wxMem = null; // cache météo en mémoire (évite de relire le stockage à chaque fois)
@@ -224,6 +241,37 @@ async function fetchWeather(spots) {
   for (const k of Object.keys(cache)) if (now - cache[k].t > 6 * 3600000) delete cache[k];
   if (todo.length) store.set('wxCache3', cache);
   for (const s of spots) if (cache[s.id]) state.weather[s.id] = cache[s.id].w;
+}
+
+/* Pour les spots suivis (★, 🔔, mes spots), aujourd'hui et demain sont recalculés avec
+   Météo-France (AROME 1,5 km puis ARPEGE) : bien plus fin en relief que le mélange par défaut. */
+async function refineShortRange() {
+  const targets = allInRadius().filter((s) => (s.custom || state.favs.has(s.id) || state.bells[s.id] != null)
+    && state.weather[s.id] && !state.weather[s.id].mf).slice(0, 40);
+  if (!targets.length) return;
+  try {
+    const p = new URLSearchParams({
+      latitude: targets.map((s) => s.lat).join(','), longitude: targets.map((s) => s.lon).join(','),
+      elevation: targets.map((s) => s.alt).join(','),
+      daily: 'wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant',
+      models: 'meteofrance_seamless', timezone: 'Europe/Paris', forecast_days: '2',
+    });
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+    if (!r.ok) return;
+    let data = await r.json(); if (!Array.isArray(data)) data = [data];
+    data.forEach((mf, j) => {
+      const w = state.weather[targets[j].id];
+      mf.daily.time.forEach((day, k) => {
+        const i = w.daily.time.indexOf(day); if (i < 0) return;
+        for (const v of ['wind_speed_10m_max', 'wind_gusts_10m_max', 'wind_direction_10m_dominant']) {
+          if (mf.daily[v]?.[k] != null) w.daily[v][i] = mf.daily[v][k];
+        }
+      });
+      w.mf = true;
+    });
+    wxAdjCache.clear();
+    store.set('wxCache3', wxMem);
+  } catch { /* on garde le mélange par défaut */ }
 }
 
 /* ---------- filtrage ---------- */
@@ -271,7 +319,7 @@ function sortSpots(list) {
     dist: (s) => s.dist,
     snow: (s) => -(state.weather[s.id] ? summarize(state.weather[s.id]).next72 : -1),
     wind: (s) => {
-      const w = state.weather[s.id]; if (!w) return 999;
+      const w = wx(s); if (!w) return 999;
       const v = w.current.wind_speed_10m;
       return windy(s) ? Math.abs(v - 25) : 500 + Math.abs(v - 25);
     },
@@ -309,7 +357,7 @@ function computeSessionAlerts() {
   if (!state.sessionAlert) return [];
   const out = [];
   for (const s of sessionAlertTargets()) {
-    const w = state.weather[s.id];
+    const w = wx(s);
     const ses = sessionsFor(s, w).filter((x) => x.i - T0 < state.sessionHorizon);
     if (ses.length) out.push({ s, ses, w });
   }
@@ -403,7 +451,7 @@ const sportsLabel = (s) => enabledSports(s).map((x) => SESS_TYPE[x]).join(' · '
 
 function renderCard(s, alerting) {
   const node = $('#cardTpl').content.firstElementChild.cloneNode(true);
-  const w = state.weather[s.id];
+  const w = wx(s);
   node.dataset.id = s.id;
   node.classList.toggle('alerting', alerting);
   const h = node.querySelector('.name');
@@ -600,7 +648,7 @@ function renderMap() {
   const seen = new Map(); // statut -> formes présentes (légende)
   let shown = 0;
   for (const s of mapSpots()) {
-    const w = state.weather[s.id];
+    const w = wx(s);
     const { st, n } = mapStatus(s, w, state.mapDay);
     if (state.sessionsOnly && !MAP_STATUS[st].good) continue; // « Sessions possibles »
     const kite = isKite(s), shape = isWind(s) ? 'wind' : kite ? 'kite' : 'ski';
@@ -656,6 +704,7 @@ async function refresh(force = false) {
     return;
   }
   state.updated = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  await refineShortRange();
   const { alerts, sessAlerts } = render();
   notify(alerts);
   notifySessions(sessAlerts);
@@ -875,6 +924,12 @@ function toggleFav(s) {
   if (on && String(s.id).startsWith('u-') && !state.weather[s.id]) refresh(); else render();
   return on;
 }
+function syncAdj() {
+  const el = $('#adjVal'); if (!el || !detail.spot) return;
+  const v = state.windAdj[detail.spot.id] || 0;
+  el.textContent = v ? `${v > 0 ? '+' : ''}${v} %` : 'tel que prévu';
+  el.classList.toggle('on', !!v);
+}
 function syncDetailFav() {
   const b = $('#dFav'); if (!b || !detail.spot) return;
   const on = isFav(detail.spot);
@@ -889,7 +944,15 @@ async function openDetail(s, day = 0, tab) {
   $('#dTitle').innerHTML = typeIcons(s); $('#dTitle').append(s.name);
   $('#dMeta').textContent = s.custom ? `Mon spot · ${s.type === 'ski' ? s.massif : SPORTS[sportOf(s)].label} · ${s.alt} m · ${round(s.dist)} km`
     : `${s.massif} · ${s.alt} m · ${round(s.dist)} km`;
-  $('#dLinks').innerHTML = (s.info ? `<p class="d-info">${esc(s.info)}</p>` : '') + `<div class="links">${linksFor(s)}</div>`;
+  $('#dLinks').innerHTML = (s.info ? `<p class="d-info">${esc(s.info)}</p>` : '') + `<div class="links">${linksFor(s)}</div>`
+    + (windy(s) || isSki(s) ? `<div class="adj"><span>Vent sur ce spot <small class="muted">(relief, effet de col…)</small></span>
+      <span class="adj-ctl"><button class="icon-btn" data-adj="-10" aria-label="Moins de vent">−</button><b id="adjVal"></b><button class="icon-btn" data-adj="10" aria-label="Plus de vent">+</button></span></div>` : '');
+  syncAdj();
+  $('#dLinks').querySelectorAll('[data-adj]').forEach((b) => { b.onclick = () => {
+    const v = Math.max(-50, Math.min(100, (state.windAdj[s.id] || 0) + +b.dataset.adj));
+    if (v) state.windAdj[s.id] = v; else delete state.windAdj[s.id];
+    store.set('windAdj', state.windAdj); syncAdj(); render(); showDetailTab();
+  }; });
   syncDetailFav();
   if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
   showDetailTab();
@@ -917,11 +980,13 @@ async function showDetailTab() {
 /* ---------- grille de vent multi-modèles (façon Windguru) ---------- */
 const MODELS = [
   ['meteofrance_arome_france_hd', 'AROME', 'Météo-France 1,5 km · 2 j'],
+  ['icon_d2', 'ICON-D2', 'DWD 2 km · 2 j'],
   ['meteofrance_arpege_europe', 'ARPEGE', 'Météo-France 10 km · 4 j'],
   ['icon_eu', 'ICON-EU', 'DWD 7 km · 5 j'],
   ['ecmwf_ifs025', 'ECMWF', 'CEPMMT 25 km · 7 j'],
   ['gfs_seamless', 'GFS', 'NOAA 25 km · 7 j'],
 ];
+const MIX_W = { meteofrance_arome_france_hd: 4, icon_d2: 3, meteofrance_arpege_europe: 2, icon_eu: 2, ecmwf_ifs025: 1.5, gfs_seamless: 1 };
 const modelsCache = {};
 async function fetchModels(s) {
   const c = modelsCache[s.id];
@@ -932,7 +997,11 @@ async function fetchModels(s) {
     models: MODELS.map((m) => m[0]).join(','),
     timezone: 'Europe/Paris', forecast_days: '7',
   });
-  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+  let r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+  if (!r.ok) { // un modèle indisponible ne doit pas tout bloquer : on réessaie sans ICON-D2
+    p.set('models', MODELS.map((m) => m[0]).filter((m) => m !== 'icon_d2').join(','));
+    r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+  }
   if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
   const h = (await r.json()).hourly;
   modelsCache[s.id] = { t: Date.now(), h };
@@ -955,9 +1024,28 @@ function wgCell(kmh, cls = '') {
   const kn = kmh / KN;
   return `<td class="${cls}" style="background:${windColor(kn)};color:${kn >= 30 ? '#fff' : '#111'}">${wv(kmh)}</td>`;
 }
+/* « Mix Chute de neige » : moyenne pondérée des modèles (les plus fins comptent plus),
+   direction en moyenne vectorielle, fiabilité selon l'écart entre modèles. */
+function mixAt(get, i) {
+  let sw = 0, ws = 0, gs = 0, gw = 0, u = 0, v = 0;
+  const vals = [];
+  for (const [m] of MODELS) {
+    const x = get('wind_speed_10m', m, i); if (x == null) continue;
+    const wt = MIX_W[m] || 1; sw += wt; ws += wt * x; vals.push([x, wt]);
+    const g = get('wind_gusts_10m', m, i); if (g != null) { gs += wt * g; gw += wt; }
+    const d = get('wind_direction_10m', m, i);
+    if (d != null) { const r = (d * Math.PI) / 180; u += wt * x * Math.sin(r); v += wt * x * Math.cos(r); }
+  }
+  if (!sw) return null;
+  const mean = ws / sw;
+  const sd = Math.sqrt(vals.reduce((a, [x, wt]) => a + wt * (x - mean) ** 2, 0) / sw) / KN; // en nœuds
+  const conf = vals.length < 2 ? 'one' : sd < 2.5 ? 'hi' : sd < 5 ? 'mid' : 'lo';
+  return { wind: mean, gust: gw ? gs / gw : null, dir: (Math.atan2(u, v) * 180 / Math.PI + 360) % 360, conf, n: vals.length };
+}
 function renderModels() {
-  const s = detail.spot, h = detail.models;
-  const get = (v, m, i) => { const a = h[`${v}_${m}`]; return a ? a[i] : null; };
+  const s = detail.spot, h = detail.models, f = adjOf(s);
+  const isW = (v) => v === 'wind_speed_10m' || v === 'wind_gusts_10m';
+  const get = (v, m, i) => { const a = h[`${v}_${m}`]; const x = a ? a[i] : null; return x != null && isW(v) ? x * f : x; };
   const first = (v, i) => { for (const [m] of MODELS) { const x = get(v, m, i); if (x != null) return x; } return null; };
   const now = Date.now() - 3 * 3600e3;
   const cols = h.time.map((t, i) => [t, i]).filter(([t]) => +t.slice(11, 13) % 3 === 0 && new Date(t).getTime() >= now);
@@ -971,13 +1059,15 @@ function renderModels() {
   const dLbl = (d) => (d === today ? 'Auj.'
     : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }).replace('.', ''));
   const r = rangeFor(s);
-  const okCol = cols.map(([, i]) => {
-    const ws = first('wind_speed_10m', i), gu = first('wind_gusts_10m', i);
-    return windy(s) && ws != null && ws >= r.windMin && ws <= r.windMax && (gu == null || gu <= r.gustMax);
-  });
+  const mixes = cols.map(([, i]) => mixAt(get, i));
+  const okCol = mixes.map((mx) => windy(s) && mx && mx.wind >= r.windMin && mx.wind <= r.windMax && (mx.gust == null || mx.gust <= r.gustMax));
   const dayStart = new Set(); let acc = 0; for (const d of days) { dayStart.add(acc); acc += d.n; }
   const ds = (k) => (dayStart.has(k) && k ? 'ds' : '');
-  let rows = '';
+  const CONF = { hi: ['élevée', 'hi'], mid: ['moyenne', 'mid'], lo: ['faible', 'lo'], one: ['1 seul modèle', 'one'] };
+  let rows = `<tr class="m-first mix"><th title="Moyenne pondérée des modèles : les plus fins (AROME, ICON-D2) comptent le plus">Mix<small>mon modèle</small></th>${mixes.map((mx, k) => wgCell(mx?.wind, ds(k))).join('')}</tr>`
+    + `<tr class="m-gust"><th class="sub">rafales</th>${mixes.map((mx, k) => wgCell(mx?.gust, 'g ' + ds(k))).join('')}</tr>`
+    + `<tr class="m-dir"><th class="sub">dir.</th>${mixes.map((mx, k) => `<td class="dir ${ds(k)}">${mx ? arrow(mx.dir) : ''}</td>`).join('')}</tr>`
+    + `<tr class="conf"><th class="sub">fiabilité</th>${mixes.map((mx, k) => `<td class="${ds(k)}">${mx ? `<i class="cf ${CONF[mx.conf][1]}" title="Fiabilité ${CONF[mx.conf][0]} (${mx.n} modèle${mx.n > 1 ? 's' : ''})"></i>` : ''}</td>`).join('')}</tr>`;
   for (const [m, name, info] of MODELS) {
     if (!cols.some(([, i]) => get('wind_speed_10m', m, i) != null)) continue;
     rows += `<tr class="m-first"><th title="${info}">${name}<small>${info.split(' · ')[1] || ''}</small></th>${cols.map(([, i], k) => wgCell(get('wind_speed_10m', m, i), ds(k))).join('')}</tr>`;
@@ -994,7 +1084,7 @@ function renderModels() {
     return `<td class="${ds(k)}${sn >= 0.2 ? ' snow' : ''}">${sn >= 0.2 ? round(sn, sn < 10 ? 1 : 0) : ''}</td>`;
   }).join('');
   $('#dBody').innerHTML = `
-    ${windy(s) ? `<p class="d-kite">${icon(SPORTS[sportOf(s)].icon)}<span>Ta plage ${SPORTS[sportOf(s)].label} : <b>${wv(r.windMin)}–${wv(r.windMax)} ${U()}</b>, rafales ≤ ${wv(r.gustMax)} <span class="muted">· ✓ = dans ta plage (modèle le plus fin dispo)</span></span></p>` : ''}
+    ${windy(s) ? `<p class="d-kite">${icon(SPORTS[sportOf(s)].icon)}<span>Ta plage ${SPORTS[sportOf(s)].label} : <b>${wv(r.windMin)}–${wv(r.windMax)} ${U()}</b>, rafales ≤ ${wv(r.gustMax)} <span class="muted">· ✓ = dans ta plage selon le Mix</span></span></p>` : ''}
     <div class="wg-wrap"><table class="wg">
       <thead>
         <tr class="wg-days"><th></th>${days.map((d) => `<th colspan="${d.n}" class="ds">${dLbl(d.d)}</th>`).join('')}</tr>
@@ -1010,7 +1100,7 @@ function renderModels() {
     </table></div>
     <div class="wg-scale">${[0, 5, 10, 15, 20, 25, 30, 35, 40].map((kn) =>
       `<span style="background:${windColor(kn)};color:${kn >= 30 ? '#fff' : '#111'}">${state.unit === 'kn' ? kn : Math.round(kn * KN)}</span>`).join('')}<em>${U()}</em></div>
-    <p class="muted small">Pas de 3 h, fais défiler vers la droite. Vent moyen à 10 m, rafales et direction (flèche = sens du vent) pour chaque modèle. Température, pluie et neige : modèle le plus fin disponible. Données Open-Meteo.</p>`;
+    <p class="muted small"><b>Mix</b> = mon modèle : moyenne pondérée des modèles disponibles, les plus fins comptant le plus (AROME ×4, ICON-D2 ×3, ARPEGE et ICON-EU ×2, ECMWF ×1,5, GFS ×1). <b>Fiabilité</b> : <i class="cf hi"></i> modèles d'accord, <i class="cf mid"></i> écart moyen, <i class="cf lo"></i> modèles en désaccord. ${f !== 1 ? `Vent corrigé de ${state.windAdj[s.id] > 0 ? '+' : ''}${state.windAdj[s.id]} % pour ce spot. ` : ''}Pas de 3 h, fais défiler vers la droite. Données Open-Meteo.</p>`;
 }
 function hourKiteClass(s, wind, gust, depth) {
   if (!windy(s)) return '';
@@ -1021,7 +1111,9 @@ function hourKiteClass(s, wind, gust, depth) {
   return 'k-good';
 }
 function renderDetail() {
-  const s = detail.spot, h = detail.data, w = state.weather[s.id];
+  const s = detail.spot, w = wx(s), f = adjOf(s);
+  const h = f === 1 ? detail.data : { ...detail.data,
+    wind_speed_10m: detail.data.wind_speed_10m.map((v) => v * f), wind_gusts_10m: detail.data.wind_gusts_10m.map((v) => v * f) };
   if (!h) return;
   const days = [...new Set(h.time.map((t) => t.slice(0, 10)))];
   const sess = w ? sessionsFor(s, w) : [];
@@ -1233,6 +1325,7 @@ function bindUI() {
       session_spots: [...state.favs, ...Object.keys(state.bells)].filter((v, i, a) => a.indexOf(v) === i),
       ranges_kmh: { kite: state.kite, ...state.ranges },
       disciplines: Object.keys(state.disc).filter((k) => state.disc[k]),
+      wind_adj_pct: state.windAdj,
       my_spots: state.mySpots.map(({ id, name, type, sport, sports, lat, lon, alt }) => ({ id, name, type, sport, sports, lat, lon, alt })),
     };
     const txt = JSON.stringify(cfg, null, 2);

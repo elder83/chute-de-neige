@@ -536,3 +536,16 @@ h2[tabindex]:focus { outline: none; }
 .sg-fav { margin-left: auto; padding: 4px; }
 .sg-fav.on, #dFav.on { color: var(--warn); }
 .sg-fav.on .i, #dFav.on .i { fill: currentColor; }
+
+/* Mix « mon modèle » et fiabilité */
+.wg tr.mix th { color: var(--accent); }
+.wg tr.mix td { box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.wg tr.conf td { height: 16px; }
+.cf { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); vertical-align: middle; }
+.cf.hi { background: var(--good); } .cf.mid { background: var(--warn); } .cf.lo { background: var(--bad); } .cf.one { background: var(--border); }
+/* correction du vent par spot */
+.adj { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13.5px; }
+.adj-ctl { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: 0 4px; flex: none; }
+.adj-ctl .icon-btn { font-size: 18px; line-height: 1; padding: 4px 8px; color: var(--text); }
+.adj-ctl b { min-width: 84px; text-align: center; font-weight: 600; font-size: 13px; color: var(--muted); }
+.adj-ctl b.on { color: var(--accent); }
