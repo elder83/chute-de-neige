@@ -4,6 +4,9 @@ Petite appli web (installable sur téléphone) pour suivre les **spots de snowki
 
 - 📍 position par GPS ou par ville (Hyères par défaut) + **rayon réglable** (50 → 1200 km)
 - 🌡️ météo actuelle, **neige au sol**, neige tombée sur 48 h, prévisions **14 jours** (neige, températures, vent)
+- 🌬️ **mes spots** (kite mer/lac, wing, planche à voile, snowkite perso) avec une plage de vent par sport
+- 📊 **grille de vent multi-modèles façon Windguru** (AROME, ARPEGE, ICON-EU, ECMWF, GFS) en touchant une fiche ou un marqueur
+- 🔔 **alerte « session possible »** sur les favoris, les spots avec cloche et mes spots (dans l'appli et via ntfy)
 - 🕐 **détail heure par heure** en touchant une fiche (vent, rafales, direction, température, neige), créneaux kite en vert
 - 💨 vent en **nœuds** (ou km/h au choix) avec vent max, direction et rafales pour chaque jour
 - 🪁 indicateur **vent kite** (bon entre 12 et 40 km/h, rafales < 55 km/h) et tri par conditions de vent

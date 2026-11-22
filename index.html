@@ -37,6 +37,9 @@
       <symbol id="i-mountain" viewBox="0 0 24 24"><path d="m2 20 7-12 4 6 3-4 6 10z"/></symbol>
       <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
       <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+      <symbol id="i-wing" viewBox="0 0 24 24"><path d="M3 15c2-7 9-11 18-9-6 1-10 5-12 12zM9 18l-1 3M12 11l-3 7"/></symbol>
+      <symbol id="i-windsurf" viewBox="0 0 24 24"><path d="M12 3v15M12 3c4 3 6 8 6 13h-6M3 20h18"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
       <!-- météo -->
@@ -68,6 +71,7 @@
       <button data-type="kite"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
       <button data-type="ski"><svg class="i"><use href="#i-ski"/></svg>Ski</button>
       <button data-type="fav"><svg class="i"><use href="#i-star"/></svg>Favoris</button>
+      <button data-type="mine"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
     </div>
     <div class="row">
       <button id="btnSessions" class="toggle" aria-pressed="false">
@@ -110,21 +114,55 @@
       </section>
 
       <section>
-        <h3>Session snowkite</h3>
-        <p class="muted small">Neige au sol (fraîche ou non) + vent dans ta plage.</p>
-        <label class="range"><span>Vent mini <b><output id="k-windMin-v"></output> <span id="k-windMin-u"></span></b></span><input id="k-windMin" type="range" min="5" max="40" step="1"></label>
-        <label class="range"><span>Vent maxi <b><output id="k-windMax-v"></output> <span id="k-windMax-u"></span></b></span><input id="k-windMax" type="range" min="15" max="70" step="1"></label>
-        <label class="range"><span>Rafales maxi <b><output id="k-gustMax-v"></output> <span id="k-gustMax-u"></span></b></span><input id="k-gustMax" type="range" min="20" max="90" step="5"></label>
-        <label class="range"><span>Neige au sol mini <b><output id="k-minSnow-v"></output> <span id="k-minSnow-u">cm</span></b></span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
+        <h3>Mes plages de vent</h3>
+        <div class="seg seg-wrap" id="sportSel">
+          <button data-sport="kite">Snowkite</button>
+          <button data-sport="kitesea">Kite mer</button>
+          <button data-sport="wing">Wing</button>
+          <button data-sport="windsurf">Planche</button>
+        </div>
+        <p class="muted small" id="sportHelp"></p>
+        <label class="range"><span>Vent mini <b><output id="k-windMin-v"></output> <span id="k-windMin-u"></span></b></span><input id="k-windMin" type="range"></label>
+        <label class="range"><span>Vent maxi <b><output id="k-windMax-v"></output> <span id="k-windMax-u"></span></b></span><input id="k-windMax" type="range"></label>
+        <label class="range"><span>Rafales maxi <b><output id="k-gustMax-v"></output> <span id="k-gustMax-u"></span></b></span><input id="k-gustMax" type="range"></label>
+        <label class="range" id="minSnowRow"><span>Neige au sol mini <b><output id="k-minSnow-v"></output> <span id="k-minSnow-u">cm</span></b></span><input id="k-minSnow" type="range" min="0" max="60" step="5"></label>
         <button id="kiteReset" class="link small">Valeurs par défaut</button>
       </section>
 
       <section>
-        <h3>Alertes neige</h3>
+        <h3>Mes spots</h3>
+        <p class="muted small">Ajoute tes spots de kite, wing ou planche (mer, lac) ou un spot de snowkite perso. Ils apparaissent toujours, quel que soit le rayon.</p>
+        <ul id="mySpotsList" class="my-list"></ul>
+        <div class="add-spot">
+          <input id="msName" type="text" placeholder="Nom du spot (ex : Almanarre)" autocomplete="off">
+          <select id="msSport" aria-label="Sport">
+            <option value="kitesea">Kite (mer/lac)</option>
+            <option value="wing">Wing</option>
+            <option value="windsurf">Planche à voile</option>
+            <option value="kite">Snowkite</option>
+          </select>
+          <div class="loc">
+            <svg class="i muted"><use href="#i-pin"/></svg>
+            <input id="msPlace" type="text" placeholder="Lieu, ou « 43.06, 6.13 »" autocomplete="off">
+          </div>
+          <ul id="msResults" class="results" hidden></ul>
+          <div class="row">
+            <button id="msPick" class="btn ghost"><svg class="i"><use href="#i-map"/></svg> Placer sur la carte</button>
+            <button id="msHere" class="btn ghost"><svg class="i"><use href="#i-locate"/></svg> Ma position</button>
+          </div>
+          <button id="msAlmanarre" class="link small">Ajouter l'Almanarre (Hyères) en exemple</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Alertes</h3>
         <p class="muted small">Neige prévue sur 3 jours au-dessus du seuil. Seuil par station : cloche sur la fiche.</p>
         <label class="range"><span>Seuil par défaut <b><output id="thrVal"></output> cm</b></span>
           <input id="threshold" type="range" min="5" max="80" step="5"></label>
         <label class="switch"><span>Tous les spots dans mon rayon</span><input type="checkbox" id="alertAll"></label>
+        <label class="switch"><span>Alerte « session possible » <small class="muted">(favoris ★, cloches et mes spots)</small></span><input type="checkbox" id="sessionAlert"></label>
+        <label class="range"><span>Session dans les <b><output id="horizonVal"></output> prochains jours</b></span>
+          <input id="horizon" type="range" min="1" max="7" step="1"></label>
         <div class="row">
           <button id="btnNotif" class="btn">Activer les notifications</button>
           <span id="notifState" class="muted small"></span>
@@ -157,6 +195,7 @@
       <div class="map-bar">
         <button id="mapKite" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-kite"/></svg>Kite</button>
         <button id="mapSki" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-ski"/></svg>Stations</button>
+        <button id="mapMine" class="toggle" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg>Mes spots</button>
         <button id="mapGood" class="toggle" aria-pressed="false" title="N'afficher que les spots où mes conditions sont réunies"><svg class="i"><use href="#i-star"/></svg>Bonnes conditions</button>
       </div>
       <div id="mapDays" class="d-days map-days" aria-label="Jour affiché sur la carte"></div>
@@ -199,6 +238,10 @@
       </div>
       <button class="icon-btn" data-close aria-label="Fermer"><svg class="i"><use href="#i-close"/></svg></button>
     </div>
+    <div class="d-tabs"><div class="seg" id="dTabs">
+      <button data-tab="models">Vent multi-modèles</button>
+      <button data-tab="hours">Heure par heure</button>
+    </div></div>
     <div id="dDays" class="d-days"></div>
     <div id="dBody" class="sheet-body"></div>
   </dialog>

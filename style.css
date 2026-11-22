@@ -351,3 +351,54 @@ h2[tabindex]:focus { outline: none; }
 .mk-n { background: var(--st, #2563eb); }
 .mk.st-good .mk-n, .mk.st-powder .mk-n { background: #111827; }
 .pop-st { font-weight: 600; color: var(--st); }
+
+/* Mes spots */
+.seg-wrap { display: flex; flex-wrap: wrap; }
+.seg-wrap button { flex: 1; padding: 7px 8px; }
+.my-list { list-style: none; margin: 8px 0; padding: 0; }
+.my-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.my-list li > span { flex: 1; min-width: 0; }
+.my-list .icon-btn { padding: 4px; }
+.add-spot { display: grid; gap: 8px; margin-top: 8px; }
+.add-spot select { width: 100%; }
+.add-spot .row { margin-top: 0; }
+.add-spot .btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; padding: 6px 10px; }
+.add-spot .link { justify-self: start; margin-top: 0; }
+#map.picking { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 2px; }
+.card.mine { border-left: 3px solid var(--accent); }
+.mk.wind { border-radius: 6px; }
+.lg.wind { border-radius: 3px; }
+.sess-alert .i { color: var(--good); }
+
+/* Onglets du détail */
+.d-tabs { padding: 10px 16px 0; flex: none; }
+.d-tabs .seg { display: flex; }
+.d-tabs .seg button { flex: 1; }
+
+/* Grille façon Windguru */
+.wg-wrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; -webkit-overflow-scrolling: touch; }
+.wg { border-collapse: separate; border-spacing: 0; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.wg th, .wg td { padding: 0; height: 22px; min-width: 27px; }
+.wg thead th { font-weight: 600; color: var(--muted); font-size: 11px; }
+.wg thead tr.wg-days th { color: var(--text); text-transform: capitalize; text-align: left; padding-left: 4px; }
+.wg tbody th, .wg thead th:first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--card); text-align: left; padding-right: 8px;
+  min-width: 66px; font-size: 11.5px; white-space: nowrap;
+}
+.wg tbody th small { display: block; font-weight: 400; color: var(--muted); font-size: 9.5px; line-height: 1; }
+.wg tbody th.sub { font-weight: 400; color: var(--muted); font-size: 10.5px; padding-left: 8px; }
+.wg tr.m-first td { font-weight: 700; font-size: 12.5px; }
+.wg tr.m-first > * { border-top: 6px solid var(--card); }
+.wg tr.m-gust td { font-size: 11px; opacity: .85; }
+.wg tr.m-dir td { height: 18px; }
+.wg td.dir .i { width: 13px; height: 13px; stroke-width: 2.2; color: var(--text); }
+.wg td.na { color: var(--muted); }
+.wg .ds { border-left: 2px solid var(--card); }
+.wg tr.ok td { color: var(--good); font-weight: 700; height: 16px; }
+.wg tr.extra td { color: var(--text); font-size: 11.5px; }
+.wg tbody tr.extra:nth-last-child(-n+3) > * { border-top: 0; }
+.wg td.snow { color: var(--snow); font-weight: 700; }
+.wg-scale { display: flex; align-items: center; margin: 10px 0 6px; font-size: 10.5px; }
+.wg-scale span { flex: 1; text-align: center; padding: 2px 0; }
+.wg-scale em { font-style: normal; color: var(--muted); margin-left: 6px; }
+.d-kite > span { flex: 1; min-width: 0; }

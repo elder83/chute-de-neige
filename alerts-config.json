@@ -1,5 +1,9 @@
 {
-  "home": { "lat": 43.1204, "lon": 6.1286, "label": "Hyères" },
+  "home": {
+    "lat": 43.1204,
+    "lon": 6.1286,
+    "label": "Hyères"
+  },
   "radius_km": 400,
   "default_threshold_cm": 20,
   "alert_all_in_radius": false,
@@ -9,5 +13,23 @@
     "montcenis": 15,
     "isola": 20,
     "praloup": 20
-  }
+  },
+  "session_alert": true,
+  "session_horizon_days": 3,
+  "session_spots": [
+    "lautaret",
+    "montcenis",
+    "vars-col"
+  ],
+  "my_spots": [
+    {
+      "id": "u-almanarre",
+      "name": "Almanarre (Hyères)",
+      "type": "wind",
+      "sport": "kitesea",
+      "lat": 43.0605,
+      "lon": 6.1307,
+      "alt": 0
+    }
+  ]
 }
